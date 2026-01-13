@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Sky SVN Automation",
+  "version": "1.0",
+  "description": "Cria branch SVN pelo Redmine",
+  "permissions": ["activeTab"],
+  "content_scripts": [
+    {
+      "matches": ["*://redmine.skyinformatica.com.br/issues/*"],
+      "js": ["content.js"]
+    }
+  ]
+}
