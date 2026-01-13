@@ -246,19 +246,55 @@ function submitForm() {
     });
 }
 
+function copyTaskTitle() {
+    const taskId = window.location.pathname.split('/').pop();
+    const descriptionEl = document.querySelector('.subject h3');
+    if (!descriptionEl) return;
+    const description = descriptionEl.innerText.trim();
+    const textToCopy = `T #${taskId} - ${description}`;
+    
+    navigator.clipboard.writeText(textToCopy).then(() => {
+        const btn = document.getElementById('sky-copy-btn');
+        if (btn) {
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '✅ Copiado!';
+            setTimeout(() => {
+                btn.innerHTML = originalText;
+            }, 2000);
+        }
+    });
+}
+
 // Inicialização
 injectStyles();
 setInterval(() => {
+    // Botão Criar Branch (Estilo Nativo do Redmine)
     if (!document.getElementById('sky-svn-btn')) {
         const menu = document.querySelector('#content > .contextual');
         if (menu) {
             const btn = document.createElement('a');
             btn.id = 'sky-svn-btn';
-            btn.innerHTML = '⚡ Criar Branch';
-            btn.className = 'icon icon-add';
-            btn.style.cssText = "background-color: #2563eb; color: white !important; padding: 5px 10px 5px 28px; border-radius: 4px; font-weight: 600; cursor: pointer; margin-left: 10px; border: 1px solid #1d4ed8; font-size: 13px;";
+            btn.innerHTML = 'Criar Branch'; // Texto simples, sem emoji para combinar com o padrão
+            btn.className = 'icon icon-add'; // Classe padrão do Redmine
+            btn.href = '#';
             btn.onclick = (e) => { e.preventDefault(); openModal(); };
+            // Inserir como primeiro item ou onde preferir. O padrão é prepend para ficar visível.
             menu.prepend(btn);
+        }
+    }
+
+    // Botão Copiar (Ao lado do título)
+    if (!document.getElementById('sky-copy-btn')) {
+        const titleHeader = document.querySelector('h2.inline-flex');
+        if (titleHeader) {
+            const btn = document.createElement('a');
+            btn.id = 'sky-copy-btn';
+            btn.title = 'Copiar Título Formatado';
+            btn.className = 'icon icon-copy'; // Ícone de cópia do Redmine
+            btn.style.cssText = "margin-left: 10px; cursor: pointer; font-size: 14px; vertical-align: middle; text-decoration: none;";
+            btn.href = '#';
+            btn.onclick = (e) => { e.preventDefault(); copyTaskTitle(); };
+            titleHeader.appendChild(btn);
         }
     }
 }, 1000);
