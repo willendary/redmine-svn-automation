@@ -382,9 +382,12 @@ async function checkBranchStatus() {
                 return;
             }
         }
+        // 3. Se chegou aqui e não retornou, não achou em nenhuma
+        branchCheckDone = true;
 
     } catch (err) {
         console.error("Erro ao verificar branch:", err);
+        branchCheckDone = true; // Mesmo com erro, encerra a busca para liberar o botão
     } finally { 
         isCheckingBranch = false; 
     }
@@ -414,29 +417,50 @@ injectStyles();
 setInterval(() => {
     checkBranchStatus();
 
-    // Botão Criar Branch (Estilo Nativo do Redmine)
-    if (!document.getElementById('sky-svn-btn')) {
-        const menu = document.querySelector('#content > .contextual');
-        if (menu) {
-            const btn = document.createElement('a');
-            btn.id = 'sky-svn-btn';
-            btn.innerHTML = 'Criar Branch'; // Texto simples, sem emoji para combinar com o padrão
-            btn.className = 'icon icon-add'; // Classe padrão do Redmine
-            btn.href = '#';
-            btn.onclick = (e) => { e.preventDefault(); openModal(); };
-            // Inserir como primeiro item ou onde preferir. O padrão é prepend para ficar visível.
-            menu.prepend(btn);
+    const menu = document.querySelector('#content > .contextual');
+    if (!menu) return;
+
+    // Se ainda está buscando, mostra um placeholder ou não mostra o botão de criar
+    if (!branchCheckDone && !document.getElementById('sky-branch-info')) {
+        if (!document.getElementById('sky-svn-searching')) {
+            const searching = document.createElement('a');
+            searching.id = 'sky-svn-searching';
+            searching.innerHTML = 'Buscando Branch... ';            
+            searching.className = 'icon icon-wait'; // Ícone de carregamento do Redmine
+            searching.href = '#';
+            searching.style.cursor = 'wait';
+            searching.onclick = (e) => e.preventDefault();
+            menu.prepend(searching);
         }
+        // Remove o botão de criar se ele existir (para garantir que não apareça antes do tempo)
+        const existingBtn = document.getElementById('sky-svn-btn');
+        if (existingBtn) existingBtn.remove();
+        return;
     }
 
-    // Botão Copiar (Ao lado do título)
+    // Se a busca terminou, remove o placeholder de "Buscando"
+    const searchingPlaceholder = document.getElementById('sky-svn-searching');
+    if (searchingPlaceholder) searchingPlaceholder.remove();
+
+    // Só cria o botão "Criar Branch" se a busca terminou E não achou branch vinculada
+    if (branchCheckDone && !document.getElementById('sky-branch-info') && !document.getElementById('sky-svn-btn')) {
+        const btn = document.createElement('a');
+        btn.id = 'sky-svn-btn';
+        btn.innerHTML = 'Criar Branch';
+        btn.className = 'icon icon-add';
+        btn.href = '#';
+        btn.onclick = (e) => { e.preventDefault(); openModal(); };
+        menu.prepend(btn);
+    }
+
+    // Botão Copiar (Ao lado do título) - Pode ficar sempre visível pois não depende do SVN
     if (!document.getElementById('sky-copy-btn')) {
         const titleHeader = document.querySelector('h2.inline-flex');
         if (titleHeader) {
             const btn = document.createElement('a');
             btn.id = 'sky-copy-btn';
             btn.title = 'Copiar Título Formatado';
-            btn.className = 'icon icon-copy'; // Ícone de cópia do Redmine
+            btn.className = 'icon icon-copy'; 
             btn.style.cssText = "margin-left: 10px; cursor: pointer; font-size: 14px; vertical-align: middle; text-decoration: none;";
             btn.href = '#';
             btn.onclick = (e) => { e.preventDefault(); copyTaskTitle(); };
