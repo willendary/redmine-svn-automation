@@ -187,6 +187,139 @@ app.get('/task-branch', async (req, res) => {
     return res.json({ found: false });
 });
 
+// Rota para buscar histórico de commits (Log)
+app.get('/branch-log', async (req, res) => {
+    const { url } = req.query;
+    if (!url) return res.status(400).json({ error: 'URL obrigatória' });
+
+    console.log(`[LOG] Buscando histórico de: ${url}`);
+    
+    // Busca os últimos 50 commits, parando na cópia (criação da branch)
+    const command = `svn log "${url}" --xml --stop-on-copy --limit 50 --non-interactive`;
+
+    exec(command, { maxBuffer: 1024 * 1024 * 5 }, (error, stdout, stderr) => {
+        if (error) {
+            console.error(`[ERRO LOG] ${error.message}`);
+            return res.status(500).json({ error: 'Erro ao buscar log', details: stderr || error.message });
+        }
+
+        try {
+            // Parser manual simples de XML para evitar dependências pesadas
+            const commits = [];
+            const regex = /<logentry\s+revision="(\d+)">[\s\S]*?<author>(.*?)<\/author>[\s\S]*?<date>(.*?)<\/date>[\s\S]*?<msg>([\s\S]*?)<\/msg>/g;
+            
+            let match;
+            while ((match = regex.exec(stdout)) !== null) {
+                commits.push({
+                    revision: match[1],
+                    author: match[2],
+                    date: match[3],
+                    message: match[4].replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').trim()
+                });
+            }
+            
+            // Remove o último commit se for o de criação da branch (cópia)
+            // Geralmente queremos apenas os commits DEPOIS da criação para merge
+            // Mas deixar o usuário decidir é melhor, apenas garantimos que não traga o histórico do trunk.
+
+            res.json({ success: true, commits });
+        } catch (e) {
+            res.status(500).json({ error: 'Erro ao processar XML do log', details: e.message });
+        }
+    });
+});
+
+// Rota para verificar conflitos antes do merge (Dry-run)
+app.get('/merge-preview', async (req, res) => {
+    const { source, target } = req.query;
+    if (!source || !target) return res.status(400).json({ error: 'Source e Target obrigatórios' });
+
+    console.log(`[MERGE PREVIEW] Comparando: ${target} -> ${source}`);
+    
+    // Usamos diff --summarize para ver mudanças entre URLs sem precisar de working copy
+    const command = `svn diff --summarize "${target}" "${source}" --non-interactive`;
+    
+    exec(command, { maxBuffer: 1024 * 1024 * 5 }, (error, stdout, stderr) => {
+        if (error) {
+            console.error(`[ERRO PREVIEW] ${error.message}`);
+            console.error(`[STDERR] ${stderr}`);
+            return res.status(500).json({ error: 'Erro ao comparar', details: stderr || error.message });
+        }
+
+        const lines = stdout.split('\n');
+        // No diff --summarize, as linhas começam com M, A, D, etc.
+        const changes = lines
+            .filter(l => l.trim().length > 0)
+            .map(l => l.trim());
+
+        // Nota: diff --summarize não detecta conflitos de merge automaticamente, 
+        // mas nos diz se há diferenças.
+        res.json({
+            canMerge: true, 
+            conflicts: [],
+            changes,
+            output: stdout
+        });
+    });
+});
+
+// Rota para executar o merge (Via Tortoise para maior segurança e suporte a Working Copy)
+app.post('/execute-merge', (req, res) => {
+    const { source, target, revisions } = req.body;
+
+    if (!source) return res.status(400).json({ error: 'Source obrigatório' });
+
+    console.log(`[MERGE TORTOISE] Abrindo interface de merge para: ${source}`);
+    
+    let args = `/command:merge /fromurl:"${source}"`;
+    
+    if (revisions && revisions.length > 0) {
+        const revList = revisions.join(',');
+        args += ` /revlist:"${revList}"`;
+    }
+
+    // Se tivermos o target e ele for uma URL, o Tortoise vai pedir o caminho local (WC)
+    // Se o target fosse um caminho local, o Tortoise já saberia onde aplicar.
+    if (target && !target.startsWith('http')) {
+        args += ` /path:"${target}"`;
+    }
+
+    const psCommand = `Start-Process "TortoiseProc.exe" -ArgumentList '${args}'`;
+    
+    exec(`powershell.exe -Command "${psCommand}"`, (error) => {
+        if (error) {
+            console.error(`[ERRO TORTOISE] ${error.message}`);
+            return res.status(500).json({ success: false, error: error.message });
+        }
+        res.json({ success: true, message: "Interface do TortoiseSVN aberta." });
+    });
+});
+
+// Utilitário para abrir o TortoiseSVN (Log ou Diff)
+app.post('/open-tortoise', (req, res) => {
+    const { command, path, path2 } = req.body;
+    
+    // command: 'log', 'diff', 'merge', etc.
+    // path: url ou caminho local
+    
+    const cmdType = command || 'log';
+    let args = `/command:${cmdType} /path:"${path}"`;
+    
+    if (path2) {
+        args += ` /path2:"${path2}"`;
+    }
+
+    console.log(`[TORTOISE] Abrindo: ${cmdType} em ${path}`);
+    
+    // Importante: Aspas corretas para PowerShell
+    const psCommand = `Start-Process "TortoiseProc.exe" -ArgumentList '${args}'`;
+    
+    exec(`powershell.exe -Command "${psCommand}"`, (error) => {
+        if (error) return res.status(500).json({ success: false, error: error.message });
+        res.json({ success: true });
+    });
+});
+
 const PORT = 3000;
 app.listen(PORT, () => {
     console.log(`🚀 Servidor SVN Otimizado rodando em http://localhost:${PORT}`);

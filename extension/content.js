@@ -45,19 +45,21 @@ const SVN_STYLES = `
     .svn-input:focus { border-color: #3b82f6 !important; outline: none !important; }
     .svn-input[readonly] { background: #f8fafc !important; color: #64748b !important; }
 
-        #svn-footer {
-            padding: 20px 25px !important; border-top: 1px solid #e2e8f0 !important; background: #fff !important;
-            display: flex !important; justify-content: flex-end !important; gap: 12px !important; align-items: center !important;
-        }    .btn { 
-        padding: 0 25px !important; 
+    #svn-footer {
+        padding: 15px 20px !important; border-top: 1px solid #e2e8f0 !important; background: #fff !important;
+        display: flex !important; justify-content: flex-end !important; gap: 10px !important; align-items: center !important;
+        min-height: 70px !important;
+    }
+    .btn { 
+        padding: 0 20px !important; 
         border-radius: 5px !important; 
-        font-size: 14px !important; 
+        font-size: 13px !important; 
         font-weight: 600 !important; 
         cursor: pointer !important; 
         border: none !important; 
         transition: all 0.2s !important; 
-        height: 42px !important;
-        line-height: 42px !important;
+        height: 36px !important;
+        line-height: 36px !important;
         display: inline-flex !important;
         align-items: center !important;
         justify-content: center !important;
@@ -320,8 +322,19 @@ function updateUiWithBranch(url, relatedTaskId = null) {
             box.innerHTML = `
                 <span class="icon icon-checked" style="background-position: 0 50%;"></span>
                 <strong style="margin-right: 5px; white-space: nowrap;">${label}</strong>
-                <input type="text" value="${url}" readonly style="flex: 1; border: 1px solid #dcfce7; background: #fff; padding: 4px 8px; border-radius: 4px; font-family: monospace; color: #334155; font-size: 13px;" onclick="this.select();">
+                <input type="text" id="sky-branch-url-input" value="${url}" readonly style="flex: 1; border: 1px solid #dcfce7; background: #fff; padding: 4px 8px; border-radius: 4px; font-family: monospace; color: #334155; font-size: 13px;" onclick="this.select();">
             `;
+
+            const mergeBtn = document.createElement('a');
+            mergeBtn.className = 'icon icon-package';
+            mergeBtn.title = 'Mesclar alterações para o Trunk';
+            mergeBtn.style.cssText = 'cursor: pointer; margin-left: 10px; text-decoration: none; color: #0369a1; font-weight: 600;';
+            mergeBtn.innerText = 'Mesclar p/ Trunk';
+            mergeBtn.onclick = (e) => {
+                e.preventDefault();
+                openMergeModal(url);
+            };
+            box.appendChild(mergeBtn);
 
             const copyBtn = document.createElement('a');
             copyBtn.className = 'icon icon-copy';
@@ -341,6 +354,167 @@ function updateUiWithBranch(url, relatedTaskId = null) {
             details.prepend(box);
         }
     }
+}
+
+function openMergeModal(sourceUrl) {
+    if (document.getElementById('svn-merge-overlay')) document.getElementById('svn-merge-overlay').remove();
+
+    const targetUrl = sourceUrl.split('/branches/')[0] + '/trunk';
+    const savedLocalPath = localStorage.getItem('svn_local_trunk_path') || 'C:\\';
+    
+    const html = `
+        <div id="svn-merge-overlay">
+            <div id="svn-modal" style="max-width: 700px;">
+                <div id="svn-header">
+                    <h3>Mesclar Alterações para o Trunk</h3>
+                    <button id="svn-merge-close">&times;</button>
+                </div>
+                <div id="svn-body">
+                    <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                        <div class="svn-field" style="flex: 1;">
+                            <label>Origem (Sua Branch)</label>
+                            <input class="svn-input" value="${sourceUrl}" readonly>
+                        </div>
+                        <div class="svn-field" style="flex: 1;">
+                            <label>Caminho Local do Trunk (Obrigatório)</label>
+                            <input id="svn-local-path" class="svn-input" value="${savedLocalPath}" placeholder="Ex: C:\\Projetos\\Sky\\trunk">
+                        </div>
+                    </div>
+                    
+                    <label style="font-size: 12px; font-weight: 600; color: #475569; text-transform: uppercase;">Selecione as Revisões para Merge</label>
+                    <div id="merge-rev-list" style="margin-top: 5px; border: 1px solid #e2e8f0; border-radius: 4px; background: #fff; max-height: 250px; overflow-y: auto;">
+                        <div style="text-align: center; color: #64748b; padding: 20px;">
+                            <span class="icon icon-wait"></span> Carregando histórico da branch...
+                        </div>
+                    </div>
+
+                    <div class="svn-field" style="margin-top: 15px;">
+                        <label>Comentário do Commit (Opcional)</label>
+                        <textarea id="merge-comment" class="svn-input" style="height: 60px; padding: 8px; resize: none;"></textarea>
+                    </div>
+                </div>
+                <div id="svn-footer">
+                    <div id="merge-status"></div>
+                    <button id="svn-merge-cancel" class="btn btn-cancel">Cancelar</button>
+                    <button id="svn-merge-tortoise" class="btn btn-cancel" style="color: #0369a1; border-color: #0369a1;">Abrir Log (Tortoise)</button>
+                    <button id="svn-merge-submit" class="btn btn-confirm" disabled>EXECUTAR MERGE</button>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', html);
+    
+    const overlay = document.getElementById('svn-merge-overlay');
+    overlay.style.cssText = "position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 100000; display: flex; justify-content: center; align-items: center; backdrop-filter: blur(2px);";
+
+    const taskId = window.location.pathname.split('/').pop();
+    document.getElementById('merge-comment').value = `Merge T#${taskId}: `;
+
+    // Eventos
+    document.getElementById('svn-merge-close').onclick = () => overlay.remove();
+    document.getElementById('svn-merge-cancel').onclick = () => overlay.remove();
+    document.getElementById('svn-merge-submit').onclick = () => performMerge(sourceUrl, targetUrl);
+    document.getElementById('svn-merge-tortoise').onclick = () => openTortoise('log', sourceUrl);
+
+    // Salva caminho local ao digitar
+    document.getElementById('svn-local-path').addEventListener('input', (e) => {
+        localStorage.setItem('svn_local_trunk_path', e.target.value);
+    });
+
+    // Carrega Log
+    fetch(`http://localhost:3000/branch-log?url=${encodeURIComponent(sourceUrl)}`)
+        .then(r => r.json())
+        .then(data => {
+            const listArea = document.getElementById('merge-rev-list');
+            const submitBtn = document.getElementById('svn-merge-submit');
+            
+            if (data.success && data.commits.length > 0) {
+                let htmlLog = '<table style="width: 100%; border-collapse: collapse; font-size: 12px;">';
+                htmlLog += '<tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0;"><th style="padding: 8px; text-align: left; width: 30px;"></th><th style="padding: 8px; text-align: left; width: 60px;">Rev</th><th style="padding: 8px; text-align: left;">Mensagem</th></tr>';
+                
+                data.commits.forEach(c => {
+                    htmlLog += `
+                        <tr style="border-bottom: 1px solid #f1f5f9; cursor: pointer;" onclick="const cb = this.querySelector('input'); cb.checked = !cb.checked;">
+                            <td style="padding: 8px; text-align: center;" onclick="event.stopPropagation()">
+                                <input type="checkbox" class="merge-rev-check" value="${c.revision}" checked>
+                            </td>
+                            <td style="padding: 8px; font-family: monospace; font-weight: bold; color: #0369a1;">r${c.revision}</td>
+                            <td style="padding: 8px; color: #334155;">${c.message || '(sem comentário)'}</td>
+                        </tr>
+                    `;
+                });
+                htmlLog += '</table>';
+                listArea.innerHTML = htmlLog;
+                submitBtn.disabled = false;
+                document.getElementById('merge-status').innerText = `${data.commits.length} commits encontrados.`;
+            } else {
+                listArea.innerHTML = `<div style="padding: 20px; text-align: center; color: #ef4444;">Nenhum commit encontrado na branch ou erro ao carregar.</div>`;
+            }
+        })
+        .catch(err => {
+            document.getElementById('merge-rev-list').innerHTML = `<div style="padding: 20px; text-align: center; color: #ef4444;">Erro ao conectar ao servidor local.</div>`;
+        });
+}
+
+function performMerge(source, target) {
+    const btn = document.getElementById('svn-merge-submit');
+    const status = document.getElementById('merge-status');
+    const localPath = document.getElementById('svn-local-path').value;
+    
+    if (!localPath || localPath.length < 3) {
+        alert("Por favor, informe o caminho da pasta Trunk no seu computador.");
+        document.getElementById('svn-local-path').focus();
+        return;
+    }
+
+    const selectedRevisions = Array.from(document.querySelectorAll('.merge-rev-check:checked'))
+                                   .map(cb => cb.value)
+                                   .sort((a, b) => parseInt(a) - parseInt(b));
+
+    if (selectedRevisions.length === 0) {
+        alert("Selecione ao menos uma revisão para mesclar.");
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerText = "Abrindo Tortoise...";
+    status.innerText = `Enviando ${selectedRevisions.length} revisões para o TortoiseSVN...`;
+
+    fetch("http://localhost:3000/execute-merge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+            source, 
+            target: localPath, // Envia o caminho local como alvo
+            revisions: selectedRevisions
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            status.innerText = "Interface do Tortoise aberta.";
+            setTimeout(() => {
+                document.getElementById('svn-merge-overlay').remove();
+            }, 1000);
+        } else {
+            alert("Erro ao abrir Tortoise:\n" + data.details);
+        }
+    })
+    .catch(() => alert("Erro de conexão com o servidor local."))
+    .finally(() => {
+        btn.disabled = false;
+        btn.innerText = "EXECUTAR MERGE";
+    });
+}
+
+function openTortoise(command, path, path2 = null) {
+    fetch("http://localhost:3000/open-tortoise", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ command, path, path2 })
+    }).then(() => {
+        console.log("Comando enviado ao TortoiseSVN.");
+    });
 }
 
 async function checkBranchStatus() {
