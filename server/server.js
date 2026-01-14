@@ -121,12 +121,70 @@ app.post('/create-branch', (req, res) => {
     }
 
     const branchUrl = `${REPO_BASE}/branches/Financeiro/${cYear}/${cMonth}/${version}/T${taskId}`;
-    const command = `svn copy "${sourceUrl}" "${branchUrl}" --parents -m "Automacao: Branch T${taskId} baseada em ${sourceTag || 'trunk'}" --non-interactive`;
+    
+    // Verifica se a branch JÁ EXISTE para evitar criar subpasta (bug do SVN copy em destino existente)
+    checkSvnPath(branchUrl).then(exists => {
+        if (exists) {
+            console.log(`[AVISO] Branch já existe: ${branchUrl}`);
+            return res.json({ success: true, url: branchUrl, message: "Branch já existia." });
+        }
 
-    runSvnCallback(command, res, (stdout) => {
-        console.log(`[SUCESSO] Branch criada: ${branchUrl}`);
-        res.json({ success: true, url: branchUrl, output: stdout });
+        const command = `svn copy "${sourceUrl}" "${branchUrl}" --parents -m "Automacao: Branch T${taskId} baseada em ${sourceTag || 'trunk'}" --non-interactive`;
+
+        runSvnCallback(command, res, (stdout) => {
+            console.log(`[SUCESSO] Branch criada: ${branchUrl}`);
+            res.json({ success: true, url: branchUrl, output: stdout });
+        });
     });
+});
+
+// Helper para verificar se um caminho existe
+async function checkSvnPath(url) {
+    try {
+        await execAsync(`svn info "${url}" --non-interactive`, { stdio: 'ignore' });
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+// Rota para buscar branch existente
+app.get('/task-branch', async (req, res) => {
+    const { taskId, version } = req.query;
+    
+    if (!taskId || !version) {
+        return res.status(400).json({ found: false, error: "taskId e version são obrigatórios" });
+    }
+
+    console.log(`[BUSCA] Procurando branch para T${taskId} na versão ${version}...`);
+
+    const now = new Date();
+    // Tenta nos últimos 24 meses (2 anos)
+    const MAX_MONTHS_BACK = 24;
+    
+    // Gera lista de datas para verificar (do atual para o passado)
+    const datesToCheck = [];
+    for (let i = 0; i < MAX_MONTHS_BACK; i++) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        datesToCheck.push({
+            year: d.getFullYear(),
+            month: String(d.getMonth() + 1).padStart(2, '0')
+        });
+    }
+
+    // Função de busca (sequencial para não floodar o servidor SVN, mas pode ser paralelizada em lotes se necessário)
+    for (const date of datesToCheck) {
+        const candidateUrl = `${REPO_BASE}/branches/Financeiro/${date.year}/${date.month}/${version}/T${taskId}`;
+        const exists = await checkSvnPath(candidateUrl);
+        
+        if (exists) {
+            console.log(`[ENCONTRADO] ${candidateUrl}`);
+            return res.json({ found: true, url: candidateUrl });
+        }
+    }
+
+    console.log(`[NAO ENCONTRADO] Branch para T${taskId} não encontrada.`);
+    return res.json({ found: false });
 });
 
 const PORT = 3000;

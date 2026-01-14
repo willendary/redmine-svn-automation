@@ -228,6 +228,7 @@ function submitForm() {
         if (data.success) {
             status.className = 'success-msg';
             status.innerText = "Branch criada com sucesso!";
+            updateUiWithBranch(data.url);
             alert("✅ Sucesso!\n" + data.url);
             closeModal();
         } else {
@@ -244,6 +245,149 @@ function submitForm() {
         btn.disabled = false;
         btn.innerText = "CRIAR BRANCH";
     });
+}
+
+let isCheckingBranch = false;
+let branchCheckDone = false;
+
+
+function getRelatedTasks() {
+    const tasks = [];
+    const seenIds = new Set();
+    const currentTaskId = window.location.pathname.split('/').pop();
+
+    // 1. Tenta extrair do Fluxo de Tarefas (Mais preciso, tem a versão)
+    const fluxoRows = document.querySelectorAll('.tabela-fluxo-tarefas tr');
+    fluxoRows.forEach(row => {
+        const subjectCol = row.querySelector('.subject a');
+        const versionCol = row.querySelector('.version a');
+        
+        if (subjectCol) {
+            const href = subjectCol.getAttribute('href'); // /issues/88367
+            const id = href.split('/').pop();
+            const version = versionCol ? versionCol.innerText.split(' ')[0] : null; // "2025-25"
+
+            if (id && id !== currentTaskId && !seenIds.has(id)) {
+                tasks.push({ id, version });
+                seenIds.add(id);
+            }
+        }
+    });
+
+    // 2. Fallback: Relações (Sem versão explícita, usa a atual ou tenta descobrir)
+    // Se achamos no fluxo, geralmente é suficiente. Se não, olhamos as relações.
+    if (tasks.length === 0) {
+        const relations = document.querySelectorAll('#relations .issue');
+        relations.forEach(row => {
+            const subjectLink = row.querySelector('.subject a');
+            if (subjectLink) {
+                const id = subjectLink.getAttribute('href').split('/').pop();
+                // Relações não mostram a versão facilmente, vamos tentar sem versão (se o server permitir) ou usar a atual
+                // Por padrão, vamos tentar a versão atual como fallback
+                if (id && id !== currentTaskId && !seenIds.has(id)) {
+                    tasks.push({ id, version: null }); 
+                    seenIds.add(id);
+                }
+            }
+        });
+    }
+
+    return tasks;
+}
+
+function updateUiWithBranch(url, relatedTaskId = null) {
+    const btn = document.getElementById('sky-svn-btn');
+    if (btn) {
+        btn.innerHTML = relatedTaskId ? ` Branch em T${relatedTaskId}` : ' Branch Vinculada';
+        btn.className = 'icon icon-checked';
+        btn.style.color = 'green';
+        btn.onclick = (e) => { 
+            e.preventDefault(); 
+        };
+        btn.title = "Branch: " + url;
+    }
+
+    // Visual Box for Branch Info
+    if (!document.getElementById('sky-branch-info')) {
+        const details = document.querySelector('.issue.details');
+        if (details) {
+            const box = document.createElement('div');
+            box.id = 'sky-branch-info';
+            box.style.cssText = "background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; padding: 12px 15px; margin: 0 0 15px 0; border-radius: 6px; display: flex; align-items: center; gap: 10px; font-size: 14px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);";
+            
+            const label = relatedTaskId ? `Branch (via T#${relatedTaskId}):` : 'Branch:';
+            
+            box.innerHTML = `
+                <span class="icon icon-checked" style="background-position: 0 50%;"></span>
+                <strong style="margin-right: 5px; white-space: nowrap;">${label}</strong>
+                <input type="text" value="${url}" readonly style="flex: 1; border: 1px solid #dcfce7; background: #fff; padding: 4px 8px; border-radius: 4px; font-family: monospace; color: #334155; font-size: 13px;" onclick="this.select();">
+            `;
+
+            const copyBtn = document.createElement('a');
+            copyBtn.className = 'icon icon-copy';
+            copyBtn.title = 'Copiar caminho';
+            copyBtn.style.cssText = 'cursor: pointer; margin-left: auto; text-decoration: none; color: #15803d; font-weight: 600;';
+            copyBtn.innerText = 'Copiar';
+            copyBtn.onclick = (e) => {
+                e.preventDefault();
+                navigator.clipboard.writeText(url).then(() => {
+                    const original = copyBtn.innerText;
+                    copyBtn.innerText = 'Copiado!';
+                    setTimeout(() => copyBtn.innerText = original, 2000);
+                });
+            };
+            box.appendChild(copyBtn);
+
+            details.prepend(box);
+        }
+    }
+}
+
+async function checkBranchStatus() {
+    if (branchCheckDone || isCheckingBranch || document.getElementById('sky-branch-info')) return;
+
+    const currentTaskId = window.location.pathname.split('/').pop();
+    const versionEl = document.querySelector('.fixed-version.attribute .value');
+    
+    if (!currentTaskId || !versionEl) return;
+    
+    const currentVersion = versionEl.textContent.trim().split(' ')[0];
+
+    isCheckingBranch = true;
+    
+    try {
+        // 1. Verifica a tarefa atual
+        let data = await fetch(`http://localhost:3000/task-branch?taskId=${currentTaskId}&version=${currentVersion}`).then(r => r.json());
+        
+        if (data.found && data.url) {
+            updateUiWithBranch(data.url);
+            branchCheckDone = true;
+            return;
+        }
+
+        // 2. Se não achou, verifica tarefas relacionadas (Fluxo ou Relações)
+        const relatedTasks = getRelatedTasks();
+        
+        for (const task of relatedTasks) {
+            // Se não tiver versão (veio de relações), usa a atual como tentativa
+            const versionToCheck = task.version || currentVersion;
+            
+            console.log(`Verificando relacionada: T${task.id} na versão ${versionToCheck}`);
+            
+            data = await fetch(`http://localhost:3000/task-branch?taskId=${task.id}&version=${versionToCheck}`).then(r => r.json());
+            
+            if (data.found && data.url) {
+                updateUiWithBranch(data.url, task.id);
+                branchCheckDone = true;
+                return;
+            }
+        }
+
+    } catch (err) {
+        console.error("Erro ao verificar branch:", err);
+    } finally { 
+        isCheckingBranch = false; 
+    }
 }
 
 function copyTaskTitle() {
@@ -268,6 +412,8 @@ function copyTaskTitle() {
 // Inicialização
 injectStyles();
 setInterval(() => {
+    checkBranchStatus();
+
     // Botão Criar Branch (Estilo Nativo do Redmine)
     if (!document.getElementById('sky-svn-btn')) {
         const menu = document.querySelector('#content > .contextual');
