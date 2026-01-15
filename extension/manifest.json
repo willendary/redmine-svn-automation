@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Sky SVN Automation",
-  "version": "1.1",
+  "version": "1.2",
   "description": "Cria branch SVN pelo Redmine e Gerencia Tempo",
   "permissions": ["activeTab"],
   "content_scripts": [
@@ -12,7 +12,12 @@
         "*://redmine.skyinformatica.com.br/projects/*/issues*",
         "*://redmine.skyinformatica.com.br/time_entries*"
       ],
-      "js": ["content.js"]
+      "js": [
+        "src/estilos.js",
+        "src/api_redmine.js",
+        "src/relogio_sky.js",
+        "src/principal.js"
+      ]
     }
   ]
 }
