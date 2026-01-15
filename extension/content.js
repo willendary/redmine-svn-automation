@@ -1,26 +1,26 @@
 // CSS Styles
 const SVN_STYLES = `
-    #svn-overlay {
+    #svn-overlay, #sky-timer-overlay {
         position: fixed; top: 0; left: 0; width: 100%; height: 100%;
         background: rgba(0,0,0,0.6); z-index: 100000;
         display: flex; justify-content: center; align-items: center;
         backdrop-filter: blur(2px);
     }
-    #svn-modal {
+    #svn-modal, #sky-timer-modal {
         background: white; width: 100%; max-width: 550px;
         margin: 20px; padding: 0; border-radius: 8px;
         box-shadow: 0 10px 30px rgba(0,0,0,0.3);
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
         display: flex; flex-direction: column; overflow: hidden;
     }
-    #svn-header {
+    #svn-header, #sky-timer-header {
         background: #f1f5f9; padding: 15px 20px; border-bottom: 1px solid #e2e8f0;
         display: flex; justify-content: space-between; align-items: center;
     }
-    #svn-header h3 { margin: 0; color: #334155; font-size: 18px; font-weight: 600; }
-    #svn-close { background: none; border: none; font-size: 20px; cursor: pointer; color: #64748b; }
+    #svn-header h3, #sky-timer-header h3 { margin: 0; color: #334155; font-size: 18px; font-weight: 600; }
+    #svn-close, #sky-timer-close { background: none; border: none; font-size: 20px; cursor: pointer; color: #64748b; }
     
-    #svn-body { padding: 20px; display: flex; flex-direction: column; gap: 15px; }
+    #svn-body, #sky-timer-body { padding: 20px; display: flex; flex-direction: column; gap: 15px; }
     
     .svn-field { display: flex; flex-direction: column; gap: 5px; }
     .svn-field label { font-size: 12px; font-weight: 600; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; }
@@ -45,7 +45,7 @@ const SVN_STYLES = `
     .svn-input:focus { border-color: #3b82f6 !important; outline: none !important; }
     .svn-input[readonly] { background: #f8fafc !important; color: #64748b !important; }
 
-    #svn-footer {
+    #svn-footer, #sky-timer-footer {
         padding: 15px 20px !important; border-top: 1px solid #e2e8f0 !important; background: #fff !important;
         display: flex !important; justify-content: flex-end !important; gap: 10px !important; align-items: center !important;
         min-height: 70px !important;
@@ -71,11 +71,532 @@ const SVN_STYLES = `
     .btn-confirm { background: #22c55e; color: white; box-shadow: 0 2px 5px rgba(34, 197, 94, 0.3); }
     .btn-confirm:hover { background: #16a34a; transform: translateY(-1px); }
     .btn-confirm:disabled { background: #94a3b8; cursor: not-allowed; transform: none; box-shadow: none; }
+    .btn-danger { background: #ef4444; color: white; }
+    .btn-danger:hover { background: #dc2626; }
 
-    #svn-status { font-size: 13px; color: #64748b; margin-right: auto; }
+    #svn-status, #sky-timer-status { font-size: 13px; color: #64748b; margin-right: auto; }
     .error-msg { color: #ef4444 !important; }
     .success-msg { color: #22c55e !important; }
+
+    /* Timer Widget Styles */
+    #sky-timer-widget {
+        background: linear-gradient(to bottom, #f8fafc, #f1f5f9);
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        padding: 10px 15px;
+        margin-bottom: 15px;
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    #sky-timer-display {
+        font-family: 'Courier New', monospace;
+        font-size: 24px;
+        font-weight: bold;
+        color: #334155;
+        min-width: 120px;
+        text-align: center;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        padding: 2px 10px;
+        border-radius: 4px;
+    }
+    .sky-timer-btn {
+        width: 36px; height: 36px;
+        border-radius: 50%;
+        border: none;
+        cursor: pointer;
+        display: flex; justify-content: center; align-items: center;
+        transition: transform 0.1s;
+    }
+    .sky-timer-btn:active { transform: scale(0.95); }
+    .sky-btn-play { background: #22c55e; color: white; }
+    .sky-btn-stop { background: #ef4444; color: white; }
+    .sky-blink { animation: sky-blink 1s infinite; }
+    @keyframes sky-blink { 50% { opacity: 0.5; } }
+
+    /* My Page List Styles */
+    .sky-list-action {
+        margin-right: 8px; cursor: pointer; text-decoration: none; border: none; background: none; font-size: 14px;
+        vertical-align: middle; display: inline-block; width: 20px; text-align: center;
+    }
+    .sky-list-timer {
+        font-family: monospace; font-weight: bold; color: #166534; background: #dcfce7;
+        padding: 2px 6px; border-radius: 4px; font-size: 11px; margin-right: 8px; vertical-align: middle;
+    }
+    .sky-row-active {
+        background-color: #f0fdf4 !important; /* Green highlight for active task */
+        border-left: 3px solid #22c55e;
+    }
+    .sky-copy-list-btn {
+        opacity: 0.3; transition: opacity 0.2s; margin-left: 5px; cursor: pointer;
+    }
+    tr:hover .sky-copy-list-btn { opacity: 1; }
 `;
+
+// --- Redmine API & Logic (SkyRMTT Core) ---
+const REDMINE_CONSTANTS = {
+    STATUS: {
+        NEW: 1,
+        IN_PROGRESS: 2,
+        RESOLVED: 3,
+        CLOSED: 5
+    }
+};
+
+const RedmineService = {
+    getCsrfToken: () => {
+        const meta = document.querySelector('meta[name="csrf-token"]');
+        return meta ? meta.content : '';
+    },
+    
+    getCurrentUserId: () => {
+        const userLink = document.querySelector('#loggedas a');
+        return userLink ? userLink.getAttribute('href').split('/').pop() : null;
+    },
+
+    updateIssue: async (issueId, payload) => {
+        const token = RedmineService.getCsrfToken();
+        if (!token) throw new Error("CSRF Token não encontrado");
+
+        const response = await fetch(`/issues/${issueId}.json`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Redmine-API-Key': '', // Usa sessão do browser
+                'X-CSRF-Token': token
+            },
+            body: JSON.stringify({ issue: payload })
+        });
+
+        if (!response.ok) throw new Error(`Erro API: ${response.status}`);
+    },
+
+    setStatus: async (issueId, statusId) => {
+        return RedmineService.updateIssue(issueId, { status_id: statusId });
+    },
+
+    assignToMe: async (issueId) => {
+        const userId = RedmineService.getCurrentUserId();
+        if (userId) {
+            return RedmineService.updateIssue(issueId, { assigned_to_id: userId });
+        }
+    },
+
+    pauseOtherTasks: async (currentIssueId) => {
+        try {
+            // Busca tarefas em andamento do usuário atual
+            const response = await fetch('/issues.json?assigned_to_id=me&status_id=2', {
+                headers: { 'X-Redmine-API-Key': '' } // Sessão do browser
+            });
+            const data = await response.json();
+            
+            if (data.issues && data.issues.length > 0) {
+                const promises = data.issues.map(issue => {
+                    if (issue.id != currentIssueId) {
+                        console.log(`[SkyRMTT] Interrompendo tarefa #${issue.id}`);
+                        // Define como Interrompida (7) ou Nova (1) se 7 não existir
+                        // SkyRMTT usa 7.
+                        return RedmineService.setStatus(issue.id, 7); 
+                    }
+                });
+                await Promise.all(promises);
+            }
+        } catch (e) {
+            console.error("Erro ao pausar outras tarefas:", e);
+        }
+    },
+
+    logTime: async (issueId, hours, comments, activityId = 11) => { // 11 = Dev default?
+        const token = RedmineService.getCsrfToken();
+        const payload = {
+            time_entry: {
+                issue_id: issueId,
+                hours: hours,
+                comments: comments,
+                activity_id: activityId,
+                spent_on: new Date().toISOString().split('T')[0]
+            }
+        };
+
+        const response = await fetch(`/time_entries.json`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': token
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) throw new Error("Falha ao lançar horas");
+    },
+
+    getLoggedHoursToday: async (issueId) => {
+        try {
+            const today = new Date().toISOString().split('T')[0];
+            const response = await fetch(`/time_entries.json?issue_id=${issueId}&user_id=me&spent_on=${today}`, {
+                headers: { 'X-Redmine-API-Key': '' }
+            });
+            const data = await response.json();
+            
+            if (data.time_entries) {
+                return data.time_entries.reduce((acc, entry) => acc + entry.hours, 0);
+            }
+            return 0;
+        } catch (e) {
+            console.error("Erro ao buscar horas de hoje:", e);
+            return 0;
+        }
+    }
+};
+
+const SkyTimer = {
+    interval: null,
+    startTime: null,
+    issueId: null,
+    accumulatedOffset: 0, // Horas já lançadas hoje (decimal)
+
+    init: async () => {
+        const stored = JSON.parse(localStorage.getItem('sky_timer_state') || '{}');
+        const currentIssueId = window.location.pathname.split('/').pop();
+        
+        // Verifica se estamos na página de detalhes de uma issue
+        const isIssuePage = /^\/issues\/\d+$/.test(window.location.pathname);
+
+        // Busca horas já lançadas hoje para exibir no display (apenas se estiver na página da issue)
+        if (isIssuePage && currentIssueId && !isNaN(currentIssueId)) {
+            SkyTimer.accumulatedOffset = await RedmineService.getLoggedHoursToday(currentIssueId);
+            // Atualiza display inicial (apenas acumulado) se não estiver rodando
+            if (!stored.running || stored.issueId !== currentIssueId) {
+                SkyTimer.updateDisplay();
+            }
+        }
+
+        // Se tem timer rodando
+        if (stored.running) {
+            SkyTimer.startTime = stored.startTime;
+            SkyTimer.issueId = stored.issueId;
+            
+            if (stored.issueId === currentIssueId && isIssuePage) {
+                SkyTimer.startUI();
+            } else {
+                // Se estiver rodando em outra tarefa ou página, inicia intervalo global para atualizar listas
+                SkyTimer.startGlobalInterval();
+            }
+        }
+    },
+
+    initMyPage: () => {
+        SkyTimer.renderMyPage(); // Run immediately
+        SkyTimer.startGlobalInterval();
+    },
+
+    renderMyPage: async () => {
+        const table = document.querySelector('#block-issuesassignedtome table.list.issues');
+        if (!table) return;
+
+        const stored = JSON.parse(localStorage.getItem('sky_timer_state') || '{}');
+        const activeId = (stored.running && stored.issueId) ? stored.issueId : null;
+        const rows = table.querySelectorAll('tr.issue');
+        
+        for (const row of rows) {
+            const id = row.id.replace('issue-', '');
+            const subjectCell = row.querySelector('.subject');
+            if (!subjectCell) continue;
+
+            // --- 1. Botão Play/Stop ---
+            let btn = row.querySelector('.sky-list-action');
+            if (!btn) {
+                btn = document.createElement('span');
+                btn.className = 'sky-list-action';
+                subjectCell.prepend(btn);
+            }
+
+            const isActive = (activeId === id);
+
+            // Atualiza Estado Visual (Idempotente)
+            if (isActive) {
+                if (btn.innerHTML !== '■') { // Só atualiza se mudou
+                    btn.innerHTML = '&#9632;'; // Stop
+                    btn.style.color = '#ef4444';
+                    btn.title = "Parar Timer (Tarefa em andamento)";
+                    btn.onclick = (e) => { e.stopPropagation(); SkyTimer.stop(); };
+                    row.classList.add('sky-row-active');
+                    
+                    // Timer Display
+                    if (!row.querySelector('.sky-list-timer')) {
+                        const timerSpan = document.createElement('span');
+                        timerSpan.className = 'sky-list-timer';
+                        timerSpan.id = `sky-list-timer-${id}`;
+                        timerSpan.innerText = "Calculando...";
+                        // Insere após o botão
+                        btn.after(timerSpan);
+                        
+                        // Busca offset inicial se necessário
+                        if (SkyTimer.accumulatedOffset === 0) {
+                             SkyTimer.accumulatedOffset = await RedmineService.getLoggedHoursToday(id);
+                        }
+                    }
+                }
+            } else {
+                if (btn.innerHTML !== '►') { // Só atualiza se mudou
+                    btn.innerHTML = '&#9658;'; // Play
+                    btn.style.color = '#22c55e';
+                    btn.title = "Iniciar Timer nesta tarefa";
+                    btn.onclick = (e) => { 
+                        e.stopPropagation(); 
+                        if (activeId && activeId !== id) {
+                            if(!confirm("Existe outra tarefa em andamento. Deseja parar a anterior e iniciar esta?")) return;
+                        }
+                        SkyTimer.start(id); 
+                    };
+                    row.classList.remove('sky-row-active');
+                    const existingTimer = row.querySelector('.sky-list-timer');
+                    if (existingTimer) existingTimer.remove();
+                }
+            }
+
+            // --- 2. Botão Copiar ---
+            if (!row.querySelector('.sky-copy-list-btn')) {
+                const copyBtn = document.createElement('span');
+                copyBtn.className = 'sky-copy-list-btn';
+                copyBtn.innerHTML = '📋';
+                copyBtn.title = "Copiar ID e Título";
+                copyBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    const text = `T #${id} - ${subjectCell.querySelector('a').innerText}`;
+                    navigator.clipboard.writeText(text);
+                    const original = copyBtn.innerHTML;
+                    copyBtn.innerHTML = '✅';
+                    setTimeout(() => copyBtn.innerHTML = original, 1000);
+                };
+                subjectCell.appendChild(copyBtn);
+            }
+        }
+    },
+
+    start: async (issueId) => {
+        // Para qualquer outro timer anterior
+        SkyTimer.stopInternal();
+
+        // Atualiza offset ao iniciar para garantir precisão
+        SkyTimer.accumulatedOffset = await RedmineService.getLoggedHoursToday(issueId);
+
+        SkyTimer.issueId = issueId;
+        SkyTimer.startTime = Date.now();
+        localStorage.setItem('sky_timer_state', JSON.stringify({
+            running: true,
+            issueId: issueId,
+            startTime: SkyTimer.startTime
+        }));
+
+        if (window.location.pathname.includes('/my/page')) {
+            SkyTimer.renderMyPage();
+            SkyTimer.startGlobalInterval();
+        } else {
+            SkyTimer.startUI();
+        }
+        
+        // Automação: Em Andamento + Atribuir para mim + Pausar Outras
+        RedmineService.pauseOtherTasks(issueId);
+        RedmineService.setStatus(issueId, REDMINE_CONSTANTS.STATUS.IN_PROGRESS).catch(console.error);
+        RedmineService.assignToMe(issueId).catch(console.error);
+    },
+
+    stop: () => {
+        if (!SkyTimer.startTime) return;
+        const sessionHours = (Date.now() - SkyTimer.startTime) / 1000 / 3600; // Horas apenas desta sessão
+        
+        SkyTimer.openLogModal(sessionHours);
+        SkyTimer.stopInternal();
+    },
+
+    stopInternal: () => {
+        if (SkyTimer.interval) clearInterval(SkyTimer.interval);
+        SkyTimer.interval = null;
+        SkyTimer.startTime = null;
+        localStorage.removeItem('sky_timer_state');
+        
+        // Ao parar, volta a mostrar apenas o acumulado do servidor (ou soma visualmente até recarregar)
+        // Por segurança, mantemos o acumulado visual até o reload
+        SkyTimer.updateDisplay();
+        
+        // Atualiza UI da lista se estiver nela
+        if (window.location.pathname.includes('/my/page')) {
+             SkyTimer.renderMyPage(); // Remove estilos ativos
+        }
+
+        const btn = document.getElementById('sky-timer-toggle');
+        if (btn) {
+            btn.className = 'sky-timer-btn sky-btn-play';
+            btn.innerHTML = '&#9658;'; // Play
+            btn.title = "Iniciar Trabalho";
+        }
+    },
+
+    startUI: () => {
+        const btn = document.getElementById('sky-timer-toggle');
+        if (btn) {
+            btn.className = 'sky-timer-btn sky-btn-stop sky-blink';
+            btn.innerHTML = '&#9632;'; // Stop
+            btn.title = "Parar e Lançar Horas";
+        }
+
+        SkyTimer.startGlobalInterval();
+        // Atualiza imediatamente
+        SkyTimer.updateDisplay();
+    },
+
+    startGlobalInterval: () => {
+        if (SkyTimer.interval) clearInterval(SkyTimer.interval);
+        SkyTimer.interval = setInterval(() => {
+            SkyTimer.updateDisplay();
+            // Se estiver na "Minha Página", re-verifica a lista periodicamente
+            if (window.location.pathname.includes('/my/page')) {
+                SkyTimer.renderMyPage();
+            }
+        }, 1000);
+    },
+
+    updateDisplay: () => {
+        // Lógica de cálculo
+        if (!SkyTimer.startTime) return; // Nada a exibir se parado
+        
+        let totalSeconds = SkyTimer.accumulatedOffset * 3600; 
+        const sessionSeconds = (Date.now() - SkyTimer.startTime) / 1000;
+        totalSeconds += sessionSeconds;
+
+        // Formatação HH:MM:SS
+        const h = Math.floor(totalSeconds / 3600);
+        const m = Math.floor((totalSeconds % 3600) / 60);
+        const s = Math.floor(totalSeconds % 60);
+
+        const text = 
+            String(h).padStart(2, '0') + ':' + 
+            String(m).padStart(2, '0') + ':' + 
+            String(s).padStart(2, '0');
+            
+        // 1. Atualiza Widget na página da Issue
+        const el = document.getElementById('sky-timer-display');
+        if (el) el.innerText = text;
+
+        // 2. Atualiza Timer na Lista (Minha Página)
+        if (SkyTimer.issueId) {
+            const listEl = document.getElementById(`sky-list-timer-${SkyTimer.issueId}`);
+            if (listEl) listEl.innerText = text;
+        }
+    },
+
+    openLogModal: (hours) => {
+        const hoursFixed = hours.toFixed(2);
+        
+        const html = `
+        <div id="sky-timer-overlay">
+            <div id="sky-timer-modal">
+                <div id="sky-timer-header">
+                    <h3>Registrar Tempo (SkyRMTT)</h3>
+                    <button id="sky-timer-close">&times;</button>
+                </div>
+                <div id="sky-timer-body">
+                    <div class="svn-field">
+                        <label>Tempo Decorrido (Horas)</label>
+                        <input id="sky-log-hours" class="svn-input" value="${hoursFixed}">
+                    </div>
+                    <div class="svn-field">
+                        <label>Comentário</label>
+                        <textarea id="sky-log-comment" class="svn-input" style="height: 60px;"></textarea>
+                    </div>
+                    <div class="svn-field" style="flex-direction: row; align-items: center; gap: 10px;">
+                        <input type="checkbox" id="sky-log-resolve" checked>
+                        <label for="sky-log-resolve" style="margin:0; cursor:pointer;">Definir como RESOLVIDA?</label>
+                    </div>
+                </div>
+                <div id="sky-timer-footer">
+                    <div id="sky-timer-status"></div>
+                    <button id="sky-timer-cancel" class="btn btn-cancel">Cancelar</button>
+                    <button id="sky-timer-submit" class="btn btn-confirm">LANÇAR HORAS</button>
+                </div>
+            </div>
+        </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', html);
+
+        // Preenche comentário com último da branch ou genérico
+        document.getElementById('sky-log-comment').value = "Desenvolvimento"; 
+
+        // Eventos
+        const close = () => document.getElementById('sky-timer-overlay').remove();
+        document.getElementById('sky-timer-close').onclick = close;
+        document.getElementById('sky-timer-cancel').onclick = close;
+        document.getElementById('sky-timer-submit').onclick = () => {
+            const h = document.getElementById('sky-log-hours').value;
+            const c = document.getElementById('sky-log-comment').value;
+            const resolve = document.getElementById('sky-log-resolve').checked;
+            
+            const statusDiv = document.getElementById('sky-timer-status');
+            const btnSubmit = document.getElementById('sky-timer-submit');
+            
+            statusDiv.innerText = "Enviando...";
+            btnSubmit.disabled = true;
+
+            const taskId = window.location.pathname.split('/').pop();
+
+            // Promise Chain
+            const actions = [ RedmineService.logTime(taskId, h, c) ];
+            if (resolve) actions.push(RedmineService.setStatus(taskId, REDMINE_CONSTANTS.STATUS.RESOLVED));
+
+            Promise.all(actions)
+                .then(() => {
+                    alert("Tempo registrado e status atualizado!");
+                    close();
+                    window.location.reload();
+                })
+                .catch(err => {
+                    statusDiv.className = 'error-msg';
+                    statusDiv.innerText = "Erro: " + err.message;
+                    btnSubmit.disabled = false;
+                });
+        };
+    }
+};
+
+function injectTimerUI() {
+    if (document.getElementById('sky-timer-widget')) return;
+
+    const details = document.querySelector('.issue.details');
+    if (!details) return;
+
+    const div = document.createElement('div');
+    div.id = 'sky-timer-widget';
+    div.innerHTML = `
+        <div style="flex: 1;">
+            <div style="font-weight: 600; color: #475569; font-size: 12px; text-transform: uppercase;">SkyRMTT Timer</div>
+            <div style="font-size: 11px; color: #94a3b8;">Registre seu tempo automaticamente</div>
+        </div>
+        <div id="sky-timer-display">00:00:00</div>
+        <button id="sky-timer-toggle" class="sky-timer-btn sky-btn-play" title="Iniciar Trabalho">&#9658;</button>
+    `;
+
+    // Insere ANTES da caixa de branch (se houver) ou no topo
+    const branchBox = document.getElementById('sky-branch-info');
+    if (branchBox) {
+        details.insertBefore(div, branchBox);
+    } else {
+        details.prepend(div);
+    }
+
+    document.getElementById('sky-timer-toggle').onclick = () => {
+        if (SkyTimer.startTime) {
+            SkyTimer.stop();
+        } else {
+            const taskId = window.location.pathname.split('/').pop();
+            SkyTimer.start(taskId);
+        }
+    };
+    
+    SkyTimer.init();
+}
 
 function injetarEstilos() {
     if (document.getElementById('svn-styles')) return;
@@ -231,7 +752,16 @@ function enviarFormulario() {
             status.className = 'success-msg';
             status.innerText = "Branch criada com sucesso!";
             atualizarInterfaceComBranch(data.url);
-            alert("✅ Sucesso!\n" + data.url);
+            
+            // SkyRMTT Integration: Inicia Timer e coloca em Andamento
+            try {
+                SkyTimer.start(taskId);
+                alert("✅ Sucesso!\nBranch criada e Tarefa iniciada!");
+            } catch (e) {
+                console.error(e);
+                alert("✅ Sucesso na Branch!\nMas houve erro ao iniciar o timer.");
+            }
+
             fecharModal();
         } else {
             status.className = 'error-msg';
@@ -534,13 +1064,13 @@ async function verificarStatusDaBranch() {
         let data = await fetch(`http://localhost:3000/task-branch?taskId=${currentTaskId}&version=${currentVersion}`).then(r => r.json());
         
         if (data.found && data.url) {
-                atualizarInterfaceComBranch(data.url, task.id);
+                atualizarInterfaceComBranch(data.url);
             branchCheckDone = true;
             return;
         }
 
         // 2. Se não achou, verifica tarefas relacionadas (Fluxo ou Relações)
-        const relatedTasks = getRelatedTasks();
+        const relatedTasks = obterTarefasRelacionadas();
         
         for (const task of relatedTasks) {
             // Se não tiver versão (veio de relações), usa a atual como tentativa
@@ -551,7 +1081,7 @@ async function verificarStatusDaBranch() {
             data = await fetch(`http://localhost:3000/task-branch?taskId=${task.id}&version=${versionToCheck}`).then(r => r.json());
             
             if (data.found && data.url) {
-                updateUiWithBranch(data.url, task.id);
+                atualizarInterfaceComBranch(data.url, task.id);
                 branchCheckDone = true;
                 return;
             }
@@ -588,57 +1118,63 @@ function copiarTituloDaTarefa() {
 
 // Inicialização
 injetarEstilos();
-setInterval(() => {
-    verificarStatusDaBranch();
 
-    const menu = document.querySelector('#content > .contextual');
-    if (!menu) return;
-
-    // Se ainda está buscando, mostra um placeholder ou não mostra o botão de criar
-    if (!branchCheckDone && !document.getElementById('sky-branch-info')) {
-        if (!document.getElementById('sky-svn-searching')) {
-            const searching = document.createElement('a');
-            searching.id = 'sky-svn-searching';
-            searching.innerHTML = 'Buscando Branch... ';            
-            searching.className = 'icon icon-wait'; // Ícone de carregamento do Redmine
-            searching.href = '#';
-            searching.style.cursor = 'wait';
-            searching.onclick = (e) => e.preventDefault();
-            menu.prepend(searching);
+if (window.location.pathname === '/my/page') {
+    SkyTimer.initMyPage();
+} else {
+    setInterval(() => {
+        verificarStatusDaBranch();
+        injectTimerUI(); // SkyRMTT UI
+    
+        const menu = document.querySelector('#content > .contextual');
+        if (!menu) return;
+    
+        // Se ainda está buscando, mostra um placeholder ou não mostra o botão de criar
+        if (!branchCheckDone && !document.getElementById('sky-branch-info')) {
+            if (!document.getElementById('sky-svn-searching')) {
+                const searching = document.createElement('a');
+                searching.id = 'sky-svn-searching';
+                searching.innerHTML = 'Buscando Branch... ';            
+                searching.className = 'icon icon-wait'; // Ícone de carregamento do Redmine
+                searching.href = '#';
+                searching.style.cursor = 'wait';
+                searching.onclick = (e) => e.preventDefault();
+                menu.prepend(searching);
+            }
+            // Remove o botão de criar se ele existir (para garantir que não apareça antes do tempo)
+            const existingBtn = document.getElementById('sky-svn-btn');
+            if (existingBtn) existingBtn.remove();
+            return;
         }
-        // Remove o botão de criar se ele existir (para garantir que não apareça antes do tempo)
-        const existingBtn = document.getElementById('sky-svn-btn');
-        if (existingBtn) existingBtn.remove();
-        return;
-    }
-
-    // Se a busca terminou, remove o placeholder de "Buscando"
-    const searchingPlaceholder = document.getElementById('sky-svn-searching');
-    if (searchingPlaceholder) searchingPlaceholder.remove();
-
-    // Só cria o botão "Criar Branch" se a busca terminou E não achou branch vinculada
-    if (branchCheckDone && !document.getElementById('sky-branch-info') && !document.getElementById('sky-svn-btn')) {
-        const btn = document.createElement('a');
-        btn.id = 'sky-svn-btn';
-        btn.innerHTML = 'Criar Branch';
-        btn.className = 'icon icon-add';
-        btn.href = '#';
-        btn.onclick = (e) => { e.preventDefault(); abrirModal(); };
-        menu.prepend(btn);
-    }
-
-    // Botão Copiar (Ao lado do título) - Pode ficar sempre visível pois não depende do SVN
-    if (!document.getElementById('sky-copy-btn')) {
-        const titleHeader = document.querySelector('h2.inline-flex');
-        if (titleHeader) {
+    
+        // Se a busca terminou, remove o placeholder de "Buscando"
+        const searchingPlaceholder = document.getElementById('sky-svn-searching');
+        if (searchingPlaceholder) searchingPlaceholder.remove();
+    
+        // Só cria o botão "Criar Branch" se a busca terminou E não achou branch vinculada
+        if (branchCheckDone && !document.getElementById('sky-branch-info') && !document.getElementById('sky-svn-btn')) {
             const btn = document.createElement('a');
-            btn.id = 'sky-copy-btn';
-            btn.title = 'Copiar Título Formatado';
-            btn.className = 'icon icon-copy'; 
-            btn.style.cssText = "margin-left: 10px; cursor: pointer; font-size: 14px; vertical-align: middle; text-decoration: none;";
+            btn.id = 'sky-svn-btn';
+            btn.innerHTML = 'Criar Branch';
+            btn.className = 'icon icon-add';
             btn.href = '#';
-            btn.onclick = (e) => { e.preventDefault(); copiarTituloDaTarefa(); };
-            titleHeader.appendChild(btn);
+            btn.onclick = (e) => { e.preventDefault(); abrirModal(); };
+            menu.prepend(btn);
         }
-    }
-}, 1000);
+    
+        // Botão Copiar (Ao lado do título) - Pode ficar sempre visível pois não depende do SVN
+        if (!document.getElementById('sky-copy-btn')) {
+            const titleHeader = document.querySelector('h2.inline-flex');
+            if (titleHeader) {
+                const btn = document.createElement('a');
+                btn.id = 'sky-copy-btn';
+                btn.title = 'Copiar Título Formatado';
+                btn.className = 'icon icon-copy'; 
+                btn.style.cssText = "margin-left: 10px; cursor: pointer; font-size: 14px; vertical-align: middle; text-decoration: none;";
+                btn.href = '#';
+                btn.onclick = (e) => { e.preventDefault(); copiarTituloDaTarefa(); };
+                titleHeader.appendChild(btn);
+            }
+        }
+    }, 1000);
+}
