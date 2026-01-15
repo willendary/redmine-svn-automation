@@ -77,7 +77,7 @@ const SVN_STYLES = `
     .success-msg { color: #22c55e !important; }
 `;
 
-function injectStyles() {
+function injetarEstilos() {
     if (document.getElementById('svn-styles')) return;
     const style = document.createElement('style');
     style.id = 'svn-styles';
@@ -85,7 +85,7 @@ function injectStyles() {
     document.head.appendChild(style);
 }
 
-function createModal() {
+function criarModal() {
     if (document.getElementById('svn-overlay')) return;
 
     const html = `
@@ -128,16 +128,16 @@ function createModal() {
     document.body.insertAdjacentHTML('beforeend', html);
 
     // Event Listeners
-    document.getElementById('svn-close').onclick = closeModal;
-    document.getElementById('svn-cancel').onclick = closeModal;
+    document.getElementById('svn-close').onclick = fecharModal;
+    document.getElementById('svn-cancel').onclick = fecharModal;
     document.getElementById('svn-overlay').onclick = (e) => {
-        if (e.target.id === 'svn-overlay') closeModal();
+        if (e.target.id === 'svn-overlay') fecharModal();
     };
-    document.getElementById('svn-submit').onclick = submitForm;
+    document.getElementById('svn-submit').onclick = enviarFormulario;
 }
 
-function openModal() {
-    createModal();
+function abrirModal() {
+    criarModal();
     const taskId = window.location.pathname.split('/').pop();
     const versionEl = document.querySelector('.fixed-version.attribute .value');
     const version = versionEl ? versionEl.textContent.trim().split(' ')[0] : "";
@@ -154,14 +154,14 @@ function openModal() {
     document.getElementById('svn-overlay').style.display = 'flex';
     
     // Busca Tags
-    loadTags(year);
+    carregarTags(year);
 }
 
-function closeModal() {
+function fecharModal() {
     document.getElementById('svn-overlay').style.display = 'none';
 }
 
-function loadTags(year) {
+function carregarTags(year) {
     const select = document.getElementById('svn-tags');
     const status = document.getElementById('svn-status');
     
@@ -202,7 +202,7 @@ function loadTags(year) {
         });
 }
 
-function submitForm() {
+function enviarFormulario() {
     const taskId = document.getElementById('svn-task').value;
     const version = document.getElementById('svn-version').value;
     const sourceTag = document.getElementById('svn-tags').value;
@@ -230,9 +230,9 @@ function submitForm() {
         if (data.success) {
             status.className = 'success-msg';
             status.innerText = "Branch criada com sucesso!";
-            updateUiWithBranch(data.url);
+            atualizarInterfaceComBranch(data.url);
             alert("✅ Sucesso!\n" + data.url);
-            closeModal();
+            fecharModal();
         } else {
             status.className = 'error-msg';
             status.innerText = "Erro: " + (data.details || "Desconhecido");
@@ -253,7 +253,7 @@ let isCheckingBranch = false;
 let branchCheckDone = false;
 
 
-function getRelatedTasks() {
+function obterTarefasRelacionadas() {
     const tasks = [];
     const seenIds = new Set();
     const currentTaskId = window.location.pathname.split('/').pop();
@@ -297,7 +297,7 @@ function getRelatedTasks() {
     return tasks;
 }
 
-function updateUiWithBranch(url, relatedTaskId = null) {
+function atualizarInterfaceComBranch(url, relatedTaskId = null) {
     const btn = document.getElementById('sky-svn-btn');
     if (btn) {
         btn.innerHTML = relatedTaskId ? ` Branch em T${relatedTaskId}` : ' Branch Vinculada';
@@ -332,7 +332,7 @@ function updateUiWithBranch(url, relatedTaskId = null) {
             mergeBtn.innerText = 'Mesclar p/ Trunk';
             mergeBtn.onclick = (e) => {
                 e.preventDefault();
-                openMergeModal(url);
+                abrirModalDeMerge(url);
             };
             box.appendChild(mergeBtn);
 
@@ -356,7 +356,7 @@ function updateUiWithBranch(url, relatedTaskId = null) {
     }
 }
 
-function openMergeModal(sourceUrl) {
+function abrirModalDeMerge(sourceUrl) {
     if (document.getElementById('svn-merge-overlay')) document.getElementById('svn-merge-overlay').remove();
 
     const targetUrl = sourceUrl.split('/branches/')[0] + '/trunk';
@@ -413,8 +413,8 @@ function openMergeModal(sourceUrl) {
     // Eventos
     document.getElementById('svn-merge-close').onclick = () => overlay.remove();
     document.getElementById('svn-merge-cancel').onclick = () => overlay.remove();
-    document.getElementById('svn-merge-submit').onclick = () => performMerge(sourceUrl, targetUrl);
-    document.getElementById('svn-merge-tortoise').onclick = () => openTortoise('log', sourceUrl);
+    document.getElementById('svn-merge-submit').onclick = () => executarMerge(sourceUrl, targetUrl);
+    document.getElementById('svn-merge-tortoise').onclick = () => abrirTortoise('log', sourceUrl);
 
     // Salva caminho local ao digitar
     document.getElementById('svn-local-path').addEventListener('input', (e) => {
@@ -456,7 +456,7 @@ function openMergeModal(sourceUrl) {
         });
 }
 
-function performMerge(source, target) {
+function executarMerge(source, target) {
     const btn = document.getElementById('svn-merge-submit');
     const status = document.getElementById('merge-status');
     const localPath = document.getElementById('svn-local-path').value;
@@ -507,7 +507,7 @@ function performMerge(source, target) {
     });
 }
 
-function openTortoise(command, path, path2 = null) {
+function abrirTortoise(command, path, path2 = null) {
     fetch("http://localhost:3000/open-tortoise", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -517,7 +517,7 @@ function openTortoise(command, path, path2 = null) {
     });
 }
 
-async function checkBranchStatus() {
+async function verificarStatusDaBranch() {
     if (branchCheckDone || isCheckingBranch || document.getElementById('sky-branch-info')) return;
 
     const currentTaskId = window.location.pathname.split('/').pop();
@@ -534,7 +534,7 @@ async function checkBranchStatus() {
         let data = await fetch(`http://localhost:3000/task-branch?taskId=${currentTaskId}&version=${currentVersion}`).then(r => r.json());
         
         if (data.found && data.url) {
-            updateUiWithBranch(data.url);
+                atualizarInterfaceComBranch(data.url, task.id);
             branchCheckDone = true;
             return;
         }
@@ -567,7 +567,7 @@ async function checkBranchStatus() {
     }
 }
 
-function copyTaskTitle() {
+function copiarTituloDaTarefa() {
     const taskId = window.location.pathname.split('/').pop();
     const descriptionEl = document.querySelector('.subject h3');
     if (!descriptionEl) return;
@@ -587,9 +587,9 @@ function copyTaskTitle() {
 }
 
 // Inicialização
-injectStyles();
+injetarEstilos();
 setInterval(() => {
-    checkBranchStatus();
+    verificarStatusDaBranch();
 
     const menu = document.querySelector('#content > .contextual');
     if (!menu) return;
@@ -623,7 +623,7 @@ setInterval(() => {
         btn.innerHTML = 'Criar Branch';
         btn.className = 'icon icon-add';
         btn.href = '#';
-        btn.onclick = (e) => { e.preventDefault(); openModal(); };
+        btn.onclick = (e) => { e.preventDefault(); abrirModal(); };
         menu.prepend(btn);
     }
 
@@ -637,7 +637,7 @@ setInterval(() => {
             btn.className = 'icon icon-copy'; 
             btn.style.cssText = "margin-left: 10px; cursor: pointer; font-size: 14px; vertical-align: middle; text-decoration: none;";
             btn.href = '#';
-            btn.onclick = (e) => { e.preventDefault(); copyTaskTitle(); };
+            btn.onclick = (e) => { e.preventDefault(); copiarTituloDaTarefa(); };
             titleHeader.appendChild(btn);
         }
     }
