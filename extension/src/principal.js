@@ -54,31 +54,22 @@ try {
 // --- Funções de Melhoria da "Minha Página" ---
 
 function destacarDiasIncompletos() {
-    // Procura o bloco de Tempo Gasto
     const tabelaTempo = document.querySelector('#block-timelog table.list.time-entries tbody');
     if (!tabelaTempo) return;
 
     const linhas = tabelaTempo.querySelectorAll('tr');
-    
     linhas.forEach(linha => {
-        // Linhas de resumo geralmente não têm ID de time-entry e possuem a classe 'hours' com <em> 
-        // Ex: <td><strong>Hoje</strong></td> ... <td class="hours"><em>3.35</em></td>
         const celulaHoras = linha.querySelector('td.hours em');
-        
         if (celulaHoras) {
             const textoHoras = celulaHoras.innerText.trim();
             const horas = parseFloat(textoHoras);
-
             if (!isNaN(horas)) {
                 if (horas < 7.0) {
-                    // Dia Incompleto (Vermelho Suave)
                     linha.style.backgroundColor = '#fee2e2'; 
                     linha.style.borderLeft = '4px solid #ef4444';
                     celulaHoras.style.color = '#b91c1c';
                     celulaHoras.style.fontWeight = 'bold';
-                    linha.title = `Atenção: Apenas ${horas.toFixed(2)}h lançadas (Meta: 7h)`;
                 } else {
-                    // Dia Completo (Verde Suave)
                     linha.style.backgroundColor = '#dcfce7';
                     linha.style.borderLeft = '4px solid #22c55e';
                     celulaHoras.style.color = '#15803d';
@@ -90,53 +81,38 @@ function destacarDiasIncompletos() {
 
 async function injetarResumoDoDia() {
     if (document.getElementById('sky-day-summary')) return;
-
     const boxMinhasTarefas = document.getElementById('block-issuesassignedtome');
     if (!boxMinhasTarefas) return;
-
     const header = boxMinhasTarefas.querySelector('h3');
     if (!header) return;
-
     const span = document.createElement('span');
     span.id = 'sky-day-summary';
     span.style.cssText = "font-size: 13px; font-weight: normal; color: #166534; background: #dcfce7; padding: 3px 10px; border-radius: 20px; margin-left: 15px; vertical-align: middle; border: 1px solid #bbf7d0;";
     span.innerHTML = '🕒 Carregando total de hoje...';
     header.appendChild(span);
-
-    // Busca total geral do dia
     const totalHoras = await ServicoRedmine.obterTotalHorasGeraisHoje();
     span.innerHTML = `🕒 <strong>Total hoje:</strong> ${totalHoras.toFixed(2)}h`;
 }
 
 function injetarFiltroDeBusca() {
     if (document.getElementById('sky-quick-filter')) return;
-
     const boxMinhasTarefas = document.getElementById('block-issuesassignedtome');
     if (!boxMinhasTarefas) return;
-
     const input = document.createElement('input');
     input.id = 'sky-quick-filter';
     input.type = 'text';
     input.placeholder = '🔍 Filtrar tarefas por título ou ID...';
-    input.style.cssText = "width: 100%; padding: 8px 12px; margin-bottom: 10px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; font-size: 13px; outline: none; transition: border-color 0.2s;";
-    
-    // Insere no topo do bloco, antes da tabela
+    input.style.cssText = "width: 100%; padding: 8px 12px; margin-bottom: 10px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; font-size: 13px; outline: none;";
     const contextual = boxMinhasTarefas.querySelector('.contextual');
     if (contextual) contextual.after(input);
     else boxMinhasTarefas.prepend(input);
-
     input.oninput = () => {
         const termo = input.value.toLowerCase();
         const linhas = boxMinhasTarefas.querySelectorAll('tr.issue');
-        
         linhas.forEach(linha => {
-            const texto = linha.innerText.toLowerCase();
-            linha.style.display = texto.includes(termo) ? '' : 'none';
+            linha.style.display = linha.innerText.toLowerCase().includes(termo) ? '' : 'none';
         });
     };
-
-    input.onfocus = () => input.style.borderColor = '#2563eb';
-    input.onblur = () => input.style.borderColor = '#cbd5e1';
 }
 
 
@@ -145,7 +121,6 @@ function injetarFiltroDeBusca() {
 function gerenciarBotoesSvn() {
     const menu = document.querySelector('#content > .contextual');
     if (!menu) return;
-
     if (!verificacaoBranchConcluida && !document.getElementById('sky-branch-info')) {
         if (!document.getElementById('sky-svn-searching')) {
             const carregando = document.createElement('a');
@@ -153,17 +128,12 @@ function gerenciarBotoesSvn() {
             carregando.innerHTML = 'Buscando Branch... ';
             carregando.className = 'icon icon-wait'; 
             carregando.href = '#';
-            carregando.onclick = (e) => e.preventDefault();
             menu.prepend(carregando);
         }
-        const btnEx = document.getElementById('sky-svn-btn');
-        if (btnEx) btnEx.remove();
         return;
     }
-
     const placeholder = document.getElementById('sky-svn-searching');
     if (placeholder) placeholder.remove();
-
     if (verificacaoBranchConcluida && !document.getElementById('sky-branch-info') && !document.getElementById('sky-svn-btn')) {
         const btn = document.createElement('a');
         btn.id = 'sky-svn-btn';
@@ -191,7 +161,7 @@ function injetarBotaoCopiar() {
     }
 }
 
-// --- Lógica de Branch SVN ---
+// --- Lógica de Branch SVN & Merge ---
 
 function criarModalBranch() {
     if (document.getElementById('svn-overlay')) return;
@@ -254,7 +224,6 @@ function fecharModalBranch() { document.getElementById('svn-overlay').style.disp
 
 function carregarTagsSvn(ano) {
     const select = document.getElementById('svn-tags');
-    const status = document.getElementById('svn-status');
     select.innerHTML = '<option value="">Carregando tags...</option>';
     select.disabled = true;
     fetch(`http://localhost:3000/list-tags?year=${ano}`)
@@ -278,7 +247,6 @@ function enviarFormularioBranch() {
     const version = document.getElementById('svn-version').value;
     const sourceTag = document.getElementById('svn-tags').value;
     const year = document.getElementById('svn-year-display').innerText;
-    const btn = document.getElementById('svn-submit');
     fetch("http://localhost:3000/create-branch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -296,47 +264,135 @@ function enviarFormularioBranch() {
     });
 }
 
-function obterTarefasRelacionadas() {
-    const tarefas = [];
-    const idsVistos = new Set();
-    const idTarefaAtual = window.location.pathname.split('/').pop();
-    const linhasFluxo = document.querySelectorAll('.tabela-fluxo-tarefas tr');
-    linhasFluxo.forEach(linha => {
-        const colunaAssunto = linha.querySelector('.subject a');
-        const colunaVersao = linha.querySelector('.version a');
-        if (colunaAssunto) {
-            const id = colunaAssunto.getAttribute('href').split('/').pop();
-            const versao = colunaVersao ? colunaVersao.innerText.split(' ')[0] : null;
-            if (id && id !== idTarefaAtual && !idsVistos.has(id)) {
-                tarefas.push({ id, versao });
-                idsVistos.add(id);
-            }
-        }
-    });
-    return tarefas;
-}
-
 function atualizarInterfaceComBranch(url, idTarefaRelacionada = null) {
     const btn = document.getElementById('sky-svn-btn');
     if (btn) {
         btn.innerHTML = idTarefaRelacionada ? ` Branch em T${idTarefaRelacionada}` : ' Branch Vinculada';
         btn.className = 'icon icon-checked';
         btn.style.color = 'green';
+        btn.onclick = (e) => e.preventDefault();
     }
+
     if (!document.getElementById('sky-branch-info')) {
         const detalhes = document.querySelector('.issue.details');
         if (detalhes) {
             const caixa = document.createElement('div');
             caixa.id = 'sky-branch-info';
             caixa.style.cssText = "background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; padding: 12px 15px; margin: 0 0 15px 0; border-radius: 6px; display: flex; align-items: center; gap: 10px; font-size: 14px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);";
+            
+            const label = idTarefaRelacionada ? `Branch (via T#${idTarefaRelacionada}):` : 'Branch:';
+            
             caixa.innerHTML = `
-                <span class="icon icon-checked"></span>
-                <strong>Branch:</strong>
-                <input type="text" value="${url}" readonly style="flex: 1; border: 1px solid #dcfce7; background: #fff; padding: 4px 8px; border-radius: 4px; font-family: monospace; color: #334155; font-size: 13px;" onclick="this.select();">
+                <span class="icon icon-checked" style="background-position: 0 50%;"></span>
+                <strong style="margin-right: 5px; white-space: nowrap;">${label}</strong>
+                <input type="text" id="sky-branch-url-input" value="${url}" readonly style="flex: 1; border: 1px solid #dcfce7; background: #fff; padding: 4px 8px; border-radius: 4px; font-family: monospace; color: #334155; font-size: 13px;" onclick="this.select();">
             `;
+
+            // Botão MESCLAR
+            const btnMerge = document.createElement('a');
+            btnMerge.className = 'icon icon-package';
+            btnMerge.title = 'Mesclar alterações para o Trunk';
+            btnMerge.style.cssText = 'cursor: pointer; margin-left: 10px; text-decoration: none; color: #0369a1; font-weight: 600;';
+            btnMerge.innerText = 'Mesclar p/ Trunk';
+            btnMerge.onclick = (e) => { e.preventDefault(); abrirModalDeMerge(url); };
+            caixa.appendChild(btnMerge);
+
+            // Botão COPIAR URL
+            const btnCopiar = document.createElement('a');
+            btnCopiar.className = 'icon icon-copy';
+            btnCopiar.title = 'Copiar caminho da branch';
+            btnCopiar.style.cssText = 'cursor: pointer; margin-left: auto; text-decoration: none; color: #15803d; font-weight: 600;';
+            btnCopiar.innerText = 'Copiar';
+            btnCopiar.onclick = (e) => {
+                e.preventDefault();
+                navigator.clipboard.writeText(url).then(() => {
+                    const original = btnCopiar.innerText;
+                    btnCopiar.innerText = 'Copiado!';
+                    setTimeout(() => btnCopiar.innerText = original, 2000);
+                });
+            };
+            caixa.appendChild(btnCopiar);
+
             detalhes.prepend(caixa);
         }
     }
+}
+
+// --- Funções de Merge ---
+
+function abrirModalDeMerge(urlOrigem) {
+    if (document.getElementById('svn-merge-overlay')) document.getElementById('svn-merge-overlay').remove();
+    const urlDestino = urlOrigem.split('/branches/')[0] + '/trunk';
+    const caminhoLocalSalvo = localStorage.getItem('svn_local_trunk_path') || 'C:\\';
+    const html = `
+        <div id="svn-merge-overlay">
+            <div id="svn-modal" style="max-width: 700px;">
+                <div id="svn-header"><h3>Mesclar Alterações para o Trunk</h3><button id="svn-merge-close">&times;</button></div>
+                <div id="svn-body">
+                    <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                        <div class="svn-field" style="flex: 1;"><label>Origem (Branch)</label><input class="svn-input" value="${urlOrigem}" readonly></div>
+                        <div class="svn-field" style="flex: 1;"><label>Caminho Local Trunk</label><input id="svn-local-path" class="svn-input" value="${caminhoLocalSalvo}"></div>
+                    </div>
+                    <label style="font-size: 12px; font-weight: 600; color: #475569;">SELECIONE AS REVISÕES</label>
+                    <div id="merge-rev-list" style="margin-top: 5px; border: 1px solid #e2e8f0; border-radius: 4px; background: #fff; max-height: 250px; overflow-y: auto;"><div style="padding: 20px; text-align: center;">Carregando histórico...</div></div>
+                    <div class="svn-field" style="margin-top: 15px;"><label>Comentário (Opcional)</label><textarea id="merge-comment" class="svn-input" style="height: 60px;"></textarea></div>
+                </div>
+                <div id="svn-footer">
+                    <div id="merge-status"></div>
+                    <button id="svn-merge-cancel" class="btn btn-cancel">Cancelar</button>
+                    <button id="svn-merge-tortoise" class="btn btn-cancel" style="color: #0369a1; border-color: #0369a1;">Abrir Log (Tortoise)</button>
+                    <button id="svn-merge-submit" class="btn btn-confirm" disabled>EXECUTAR MERGE</button>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', html);
+    const overlay = document.getElementById('svn-merge-overlay');
+    overlay.style.cssText = "position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 100000; display: flex; justify-content: center; align-items: center; backdrop-filter: blur(2px);";
+    const idTarefa = window.location.pathname.split('/').pop();
+    document.getElementById('merge-comment').value = `Merge T#${idTarefa}: `;
+    document.getElementById('svn-merge-close').onclick = () => overlay.remove();
+    document.getElementById('svn-merge-cancel').onclick = () => overlay.remove();
+    document.getElementById('svn-merge-submit').onclick = () => executarMerge(urlOrigem, urlDestino);
+    document.getElementById('svn-merge-tortoise').onclick = () => abrirTortoise('log', urlOrigem);
+    document.getElementById('svn-local-path').addEventListener('input', (e) => { localStorage.setItem('svn_local_trunk_path', e.target.value); });
+    fetch(`http://localhost:3000/branch-log?url=${encodeURIComponent(urlOrigem)}`).then(r => r.json()).then(data => {
+        const areaLista = document.getElementById('merge-rev-list');
+        const btnEnviar = document.getElementById('svn-merge-submit');
+        if (data.success && data.commits.length > 0) {
+            let htmlLog = '<table style="width: 100%; font-size: 12px; border-collapse: collapse;">';
+            data.commits.forEach(c => {
+                htmlLog += `<tr style="border-bottom: 1px solid #f1f5f9; cursor: pointer;" onclick="const cb = this.querySelector('input'); cb.checked = !cb.checked;"><td style="padding: 8px; text-align: center;"><input type="checkbox" class="merge-rev-check" value="${c.revision}" checked onclick="event.stopPropagation()"></td><td style="padding: 8px; font-weight: bold; color: #0369a1;">r${c.revision}</td><td style="padding: 8px;">${c.message || ''}</td></tr>`;
+            });
+            areaLista.innerHTML = htmlLog + '</table>';
+            btnEnviar.disabled = false;
+        } else { areaLista.innerHTML = '<div style="padding: 20px; color: red;">Nenhum commit encontrado.</div>'; }
+    });
+}
+
+function executarMerge(origem, destino) {
+    const btn = document.getElementById('svn-merge-submit');
+    const caminhoLocal = document.getElementById('svn-local-path').value;
+    if (!caminhoLocal || caminhoLocal.length < 3) { alert("Informe o caminho local do Trunk."); return; }
+    const revisoes = Array.from(document.querySelectorAll('.merge-rev-check:checked')).map(cb => cb.value).sort((a, b) => parseInt(a) - parseInt(b));
+    if (revisoes.length === 0) { alert("Selecione revisões."); return; }
+    btn.disabled = true;
+    fetch("http://localhost:3000/execute-merge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source: origem, target: caminhoLocal, revisions: revisoes })
+    }).then(r => r.json()).then(data => {
+        if (data.success) document.getElementById('svn-merge-overlay').remove();
+        else alert("Erro: " + data.details);
+    }).finally(() => { btn.disabled = false; });
+}
+
+function abrirTortoise(comando, caminho, caminho2 = null) {
+    fetch("http://localhost:3000/open-tortoise", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ command: comando, path: caminho, path2: caminho2 })
+    });
 }
 
 async function verificarStatusDaBranch() {
@@ -353,8 +409,39 @@ async function verificarStatusDaBranch() {
             verificacaoBranchConcluida = true;
             return;
         }
+        // Tenta tarefas relacionadas
+        const relacionadas = obterTarefasRelacionadas();
+        for (const t of relacionadas) {
+            const v = t.versao || versaoAtual;
+            const d = await fetch(`http://localhost:3000/task-branch?taskId=${t.id}&version=${v}`).then(r => r.json());
+            if (d.found && d.url) {
+                atualizarInterfaceComBranch(d.url, t.id);
+                verificacaoBranchConcluida = true;
+                return;
+            }
+        }
         verificacaoBranchConcluida = true;
     } catch (e) { verificacaoBranchConcluida = true; } finally { estaVerificandoBranch = false; }
+}
+
+function obterTarefasRelacionadas() {
+    const tarefas = [];
+    const idsVistos = new Set();
+    const idTarefaAtual = window.location.pathname.split('/').pop();
+    const linhasFluxo = document.querySelectorAll('.tabela-fluxo-tarefas tr');
+    linhasFluxo.forEach(linha => {
+        const colAssunto = linha.querySelector('.subject a');
+        const colVersao = linha.querySelector('.version a');
+        if (colAssunto) {
+            const id = colAssunto.getAttribute('href').split('/').pop();
+            const versao = colVersao ? colVersao.innerText.split(' ')[0] : null;
+            if (id && id !== idTarefaAtual && !idsVistos.has(id)) {
+                tarefas.push({ id, versao });
+                idsVistos.add(id);
+            }
+        }
+    });
+    return tarefas;
 }
 
 function copiarTituloDaTarefa() {
