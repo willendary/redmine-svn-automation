@@ -2,7 +2,118 @@
 let estaVerificandoBranch = false;
 let verificacaoBranchConcluida = false;
 
-// --- Lógica de Branch SVN ---
+// --- Configurações Padrão ---
+const configPadrao = {
+    feature_timer: true,
+    feature_svn: true,
+    feature_mypage: true,
+    feature_copy: true
+};
+
+// --- Lógica de Inicialização ---
+
+// Função principal que orquestra tudo com base nas configs
+function iniciarExtensao(config) {
+    injetarEstilos();
+
+    // 1. Minha Página (Lista de Tarefas)
+    if (window.location.pathname === '/my/page') {
+        if (config.feature_mypage && config.feature_timer) {
+            RelogioSky.iniciarMinhaPagina();
+        }
+    } 
+    // 2. Página de Detalhes da Tarefa (/issues/12345)
+    else if (/^\/issues\/\d+$/.test(window.location.pathname)) {
+        
+        // Loop principal de atualização da UI
+        setInterval(() => {
+            // A. Funcionalidades SVN (Branch/Merge)
+            if (config.feature_svn) {
+                verificarStatusDaBranch();
+                gerenciarBotoesSvn();
+            }
+
+            // B. Funcionalidade Timer
+            if (config.feature_timer) {
+                injetarInterfaceTimer();
+            }
+
+            // C. Botão Copiar Título
+            if (config.feature_copy) {
+                injetarBotaoCopiar();
+            }
+
+        }, 1000);
+    }
+}
+
+// Carrega configurações e inicia
+try {
+    chrome.storage.sync.get(configPadrao, (items) => {
+        iniciarExtensao(items);
+    });
+} catch (e) {
+    // Fallback se não estiver num ambiente de extensão válido ou erro de storage
+    console.warn("SkyRedmine: Não foi possível carregar configurações, usando padrão.", e);
+    iniciarExtensao(configPadrao);
+}
+
+
+// --- Funções Auxiliares de UI ---
+
+function gerenciarBotoesSvn() {
+    const menu = document.querySelector('#content > .contextual');
+    if (!menu) return;
+
+    // Se ainda está buscando, mostra um placeholder
+    if (!verificacaoBranchConcluida && !document.getElementById('sky-branch-info')) {
+        if (!document.getElementById('sky-svn-searching')) {
+            const carregando = document.createElement('a');
+            carregando.id = 'sky-svn-searching';
+            carregando.innerHTML = 'Buscando Branch... ';
+            carregando.className = 'icon icon-wait'; 
+            carregando.href = '#';
+            carregando.style.cursor = 'wait';
+            carregando.onclick = (e) => e.preventDefault();
+            menu.prepend(carregando);
+        }
+        const btnExistente = document.getElementById('sky-svn-btn');
+        if (btnExistente) btnExistente.remove();
+        return;
+    }
+
+    const placeholder = document.getElementById('sky-svn-searching');
+    if (placeholder) placeholder.remove();
+
+    // Botão Criar Branch
+    if (verificacaoBranchConcluida && !document.getElementById('sky-branch-info') && !document.getElementById('sky-svn-btn')) {
+        const btn = document.createElement('a');
+        btn.id = 'sky-svn-btn';
+        btn.innerHTML = 'Criar Branch';
+        btn.className = 'icon icon-add';
+        btn.href = '#';
+        btn.onclick = (e) => { e.preventDefault(); abrirModalBranch(); };
+        menu.prepend(btn);
+    }
+}
+
+function injetarBotaoCopiar() {
+    if (!document.getElementById('sky-copy-btn')) {
+        const cabecalho = document.querySelector('h2.inline-flex');
+        if (cabecalho) {
+            const btn = document.createElement('a');
+            btn.id = 'sky-copy-btn';
+            btn.title = 'Copiar Título Formatado';
+            btn.className = 'icon icon-copy'; 
+            btn.style.cssText = "margin-left: 10px; cursor: pointer; font-size: 14px; vertical-align: middle; text-decoration: none;";
+            btn.href = '#';
+            btn.onclick = (e) => { e.preventDefault(); copiarTituloDaTarefa(); };
+            cabecalho.appendChild(btn);
+        }
+    }
+}
+
+// --- Lógica de Branch SVN (Mantida Igual) ---
 
 function criarModalBranch() {
     if (document.getElementById('svn-overlay')) return;
@@ -329,7 +440,7 @@ function abrirModalDeMerge(urlOrigem) {
     overlay.style.cssText = "position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 100000; display: flex; justify-content: center; align-items: center; backdrop-filter: blur(2px);";
 
     const idTarefa = window.location.pathname.split('/').pop();
-    document.getElementById('merge-comment').value = `T#${idTarefa}: `;
+    document.getElementById('merge-comment').value = `Merge T#${idTarefa}: `;
 
     // Eventos
     document.getElementById('svn-merge-close').onclick = () => overlay.remove();
@@ -504,67 +615,4 @@ function copiarTituloDaTarefa() {
             }, 2000);
         }
     });
-}
-
-// --- Inicialização ---
-
-injetarEstilos();
-
-if (window.location.pathname === '/my/page') {
-    RelogioSky.iniciarMinhaPagina();
-} else {
-    // Página de Detalhes da Tarefa
-    setInterval(() => {
-        verificarStatusDaBranch();
-        injetarInterfaceTimer(); 
-
-        const menu = document.querySelector('#content > .contextual');
-        if (!menu) return;
-
-        // Se ainda está buscando, mostra um placeholder
-        if (!verificacaoBranchConcluida && !document.getElementById('sky-branch-info')) {
-            if (!document.getElementById('sky-svn-searching')) {
-                const carregando = document.createElement('a');
-                carregando.id = 'sky-svn-searching';
-                carregando.innerHTML = 'Buscando Branch... ';
-                carregando.className = 'icon icon-wait'; 
-                carregando.href = '#';
-                carregando.style.cursor = 'wait';
-                carregando.onclick = (e) => e.preventDefault();
-                menu.prepend(carregando);
-            }
-            const btnExistente = document.getElementById('sky-svn-btn');
-            if (btnExistente) btnExistente.remove();
-            return;
-        }
-
-        const placeholder = document.getElementById('sky-svn-searching');
-        if (placeholder) placeholder.remove();
-
-        // Botão Criar Branch
-        if (verificacaoBranchConcluida && !document.getElementById('sky-branch-info') && !document.getElementById('sky-svn-btn')) {
-            const btn = document.createElement('a');
-            btn.id = 'sky-svn-btn';
-            btn.innerHTML = 'Criar Branch';
-            btn.className = 'icon icon-add';
-            btn.href = '#';
-            btn.onclick = (e) => { e.preventDefault(); abrirModalBranch(); };
-            menu.prepend(btn);
-        }
-
-        // Botão Copiar
-        if (!document.getElementById('sky-copy-btn')) {
-            const cabecalho = document.querySelector('h2.inline-flex');
-            if (cabecalho) {
-                const btn = document.createElement('a');
-                btn.id = 'sky-copy-btn';
-                btn.title = 'Copiar Título Formatado';
-                btn.className = 'icon icon-copy'; 
-                btn.style.cssText = "margin-left: 10px; cursor: pointer; font-size: 14px; vertical-align: middle; text-decoration: none;";
-                btn.href = '#';
-                btn.onclick = (e) => { e.preventDefault(); copiarTituloDaTarefa(); };
-                cabecalho.appendChild(btn);
-            }
-        }
-    }, 1000);
 }
