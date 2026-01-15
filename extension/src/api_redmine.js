@@ -120,5 +120,17 @@ const ServicoRedmine = {
             console.error("Erro ao buscar horas de hoje:", e);
             return 0;
         }
+    },
+
+    obterTotalHorasGeraisHoje: async () => {
+        try {
+            const hoje = new Date().toLocaleDateString('en-CA');
+            const response = await fetch(`/time_entries.json?user_id=me&spent_on=${hoje}`);
+            if (!response.ok) return 0;
+            const data = await response.json();
+            return data.time_entries ? data.time_entries.reduce((acc, entry) => acc + entry.hours, 0) : 0;
+        } catch (e) {
+            return 0;
+        }
     }
 };
