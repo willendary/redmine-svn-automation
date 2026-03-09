@@ -1,0 +1,53 @@
+{
+  "name": "sky-redmine-desktop",
+  "version": "1.0.0",
+  "author": "Willian Oliveira",
+  "description": "Redmine SVN Automation Desktop",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder build --win --publish never"
+  },
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.sky.redmine",
+    "productName": "Sky Redmine Desktop",
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "../images/logo.png"
+    },
+    "directories": {
+      "output": "dist"
+    },
+    "extraResources": [
+      {
+        "from": "../extension",
+        "to": "extension",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "../server",
+        "to": "server",
+        "filter": [
+          "**/*",
+          "!node_modules{,/**}"
+        ]
+      },
+      {
+        "from": "../images",
+        "to": "images",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ]
+  }
+}

@@ -7,6 +7,12 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Permite conexões de Private Network (Localhost vindo de HTTPS externo)
+app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Private-Network', 'true');
+    next();
+});
+
 // Promisify exec para usar async/await
 const execAsync = util.promisify(exec);
 
@@ -321,6 +327,6 @@ app.post('/open-tortoise', (req, res) => {
 });
 
 const PORT = 3000;
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Servidor SVN Otimizado rodando em http://localhost:${PORT}`);
 });
