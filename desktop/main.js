@@ -113,6 +113,7 @@ function createWindow() {
     title: 'Sky Redmine Desktop',
     autoHideMenuBar: true,
     icon: fs.existsSync(iconPath) ? iconPath : undefined,
+    backgroundColor: '#f8fafc', // Define a cor de fundo nativa para evitar flash branco
     webPreferences: {
       partition: 'persist:sky-redmine',
       nodeIntegration: false,
@@ -131,11 +132,27 @@ function createWindow() {
 
   mainWindow.loadURL(REDMINE_URL);
 
-  mainWindow.webContents.on('dom-ready', () => {
-    setTimeout(() => {
-        const code = `(function() { ${getInjectionCode()} })();`;
-        mainWindow.webContents.executeJavaScript(code).catch(e => console.error(e));
-    }, 1000);
+  mainWindow.webContents.on('dom-ready', async () => {
+    // 1. Oculta a interface padrão imediatamente para evitar que o usuário veja o Redmine "feio"
+    await mainWindow.webContents.insertCSS('html { opacity: 0; }');
+
+    // 2. Prepara o código e adiciona a lógica de revelação suave
+    const code = `(function() { 
+        ${getInjectionCode()} 
+        
+        // 3. Revela a interface suavemente APÓS os estilos serem aplicados
+        requestAnimationFrame(() => {
+            const style = document.createElement('style');
+            style.textContent = 'html { opacity: 1 !important; transition: opacity 0.4s ease-out; }';
+            document.head.appendChild(style);
+        });
+    })();`;
+
+    mainWindow.webContents.executeJavaScript(code).catch(e => {
+        console.error(e);
+        // Fallback: Se der erro, mostra a página para não travar tudo
+        mainWindow.webContents.insertCSS('html { opacity: 1 !important; }');
+    });
   });
 }
 
