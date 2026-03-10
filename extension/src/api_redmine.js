@@ -110,17 +110,22 @@ const ServicoRedmine = {
             const parser = new DOMParser();
             const doc = parser.parseFromString(html, 'text/html');
             
-            // Procura na tabela de resumo do Redmine
+            // 1. Procura na linha de TOTAL, que é o mais confiável.
             const totalRow = Array.from(doc.querySelectorAll('tr.total, .total-hours')).find(el => el.innerText.toLowerCase().includes('total'));
             if (totalRow) {
                 const hoursMatch = totalRow.innerText.match(/(\d+[.,]\d+)/);
                 if (hoursMatch) return parseFloat(hoursMatch[1].replace(',', '.'));
             }
 
-            // Fallback: procura qualquer elemento com classe hours que tenha o total
-            const totalCell = doc.querySelector('td.hours, span.hours');
-            if (totalCell) {
-                return parseFloat(totalCell.innerText.replace(',', '.')) || 0;
+            // 2. Se não achar a linha de total, soma todas as linhas de horas individuais.
+            // Este é o fallback que corrige o bug de pegar só o primeiro valor.
+            const hourCells = doc.querySelectorAll('table.list.time-entries td.hours');
+            if (hourCells.length > 0) {
+                console.warn("[Sky API] Linha de total não encontrada. Somando horas individuais como fallback.");
+                return Array.from(hourCells).reduce((sum, cell) => {
+                    const hours = parseFloat(cell.innerText.replace(',', '.'));
+                    return sum + (isNaN(hours) ? 0 : hours);
+                }, 0);
             }
 
             return 0;
