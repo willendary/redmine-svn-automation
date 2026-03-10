@@ -17,6 +17,7 @@ const configPadrao = {
 
 function iniciarExtensao(config) {
     injetarEstilos();
+    if (window.isSkyDesktop) injetarNavegacaoDesktop();
 
     // 1. Minha Página (Lista de Tarefas)
     if (window.location.pathname === '/my/page') {
@@ -77,6 +78,22 @@ function destacarDiasIncompletos() {
             }
         }
     });
+}
+
+function injetarNavegacaoDesktop() {
+    if (document.getElementById('sky-nav-controls')) return;
+    const div = document.createElement('div');
+    div.id = 'sky-nav-controls';
+    div.innerHTML = `
+        <button class="sky-nav-btn" id="sky-nav-back" title="Voltar">❮</button>
+        <button class="sky-nav-btn" id="sky-nav-reload" title="Recarregar">⟳</button>
+        <button class="sky-nav-btn" id="sky-nav-fwd" title="Avançar">❯</button>
+    `;
+    document.body.appendChild(div);
+    
+    document.getElementById('sky-nav-back').onclick = () => window.history.back();
+    document.getElementById('sky-nav-reload').onclick = () => window.location.reload();
+    document.getElementById('sky-nav-fwd').onclick = () => window.history.forward();
 }
 
 async function injetarResumoDoDia() {

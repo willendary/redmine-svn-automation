@@ -41,6 +41,7 @@ function getInjectionCode() {
     let combinedCode = `
         // SHIM STORAGE
         window.chrome = window.chrome || {};
+        window.isSkyDesktop = true;
         window.chrome.storage = {
             sync: {
                 get: (defaults, callback) => {

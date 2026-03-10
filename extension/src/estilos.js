@@ -133,6 +133,22 @@ const ESTILOS_SKY = `
         opacity: 0.3; transition: opacity 0.2s; margin-left: 5px; cursor: pointer;
     }
     tr:hover .sky-copy-list-btn { opacity: 1; }
+
+    /* Navegação Desktop (Floating) */
+    #sky-nav-controls {
+        position: fixed; bottom: 20px; left: 20px; z-index: 99999;
+        display: flex; gap: 5px;
+        background: #fff; padding: 6px 10px; border-radius: 30px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+        border: 1px solid #e2e8f0;
+    }
+    .sky-nav-btn {
+        width: 32px; height: 32px; border-radius: 50%; border: none;
+        background: transparent; color: #64748b; font-size: 16px;
+        cursor: pointer; display: flex; align-items: center; justify-content: center;
+        transition: all 0.2s;
+    }
+    .sky-nav-btn:hover { background: #f1f5f9; color: #0369a1; }
 `;
 
 function injetarEstilos() {
