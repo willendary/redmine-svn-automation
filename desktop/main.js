@@ -82,10 +82,64 @@ function getInjectionCode() {
             modal.appendChild(scriptEl);
         }
 
+        async function abrirPainelLogs() {
+            let overlay = document.getElementById('sky-logs-overlay');
+            if (overlay) { 
+                overlay.style.display = 'flex'; 
+                atualizarLogs();
+                return; 
+            }
+            overlay = document.createElement('div');
+            overlay.id = 'sky-logs-overlay';
+            overlay.style.cssText = "position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:999999; display:flex; justify-content:center; align-items:center; color: #fff;";
+            const modal = document.createElement('div');
+            modal.style.cssText = "background:#1e1e1e; padding:20px; border-radius:8px; width:90%; max-width:900px; height:80vh; overflow:hidden; position:relative; display:flex; flex-direction:column;";
+            const closeBtn = document.createElement('button');
+            closeBtn.innerHTML = '&times;';
+            closeBtn.style.cssText = "position:absolute; right:15px; top:10px; border:none; background:none; font-size:28px; cursor:pointer; color:#94a3b8;";
+            closeBtn.onclick = () => { overlay.style.display = 'none'; };
+            const title = document.createElement('h2');
+            title.textContent = 'Logs do Sistema (SVN / Backend)';
+            title.style.margin = '0 0 10px 0';
+            const content = document.createElement('div');
+            content.id = 'sky-logs-content';
+            content.style.cssText = "flex:1; overflow-y:auto; font-family:monospace; background:#000; padding:10px; border:1px solid #333; color:#0f0; white-space:pre-wrap;";
+            
+            const btnRefresh = document.createElement('button');
+            btnRefresh.textContent = 'Atualizar Logs';
+            btnRefresh.style.cssText = "margin-top:10px; padding:8px; background:#0369a1; color:#fff; border:none; cursor:pointer; border-radius:4px;";
+            btnRefresh.onclick = atualizarLogs;
+
+            modal.appendChild(closeBtn);
+            modal.appendChild(title);
+            modal.appendChild(content);
+            modal.appendChild(btnRefresh);
+            overlay.appendChild(modal);
+            document.body.appendChild(overlay);
+
+            atualizarLogs();
+
+            async function atualizarLogs() {
+                try {
+                    const res = await fetch('http://localhost:3000/logs');
+                    const data = await res.json();
+                    document.getElementById('sky-logs-content').textContent = data.logs.join('\\n');
+                    document.getElementById('sky-logs-content').scrollTop = document.getElementById('sky-logs-content').scrollHeight;
+                } catch(e) {
+                    document.getElementById('sky-logs-content').textContent = 'Erro ao buscar logs do backend: ' + e.message;
+                }
+            }
+        }
+
         function injetarBotaoOpcoes() {
             if (document.getElementById('sky-options-btn')) return;
             const topMenu = document.querySelector('#top-menu > ul');
             if (topMenu) {
+                const liLogs = document.createElement('li');
+                liLogs.innerHTML = '<a id="sky-logs-btn" href="#" style="background: #ef4444; color: white !important; border-radius: 4px; padding: 2px 10px !important; margin-left: 10px; font-weight: bold;">📝 Logs Sky</a>';
+                liLogs.onclick = (e) => { e.preventDefault(); abrirPainelLogs(); };
+                topMenu.appendChild(liLogs);
+
                 const li = document.createElement('li');
                 li.innerHTML = '<a id="sky-options-btn" href="#" style="background: #0369a1; color: white !important; border-radius: 4px; padding: 2px 10px !important; margin-left: 10px; font-weight: bold;">⚙ Config Sky</a>';
                 li.onclick = (e) => { e.preventDefault(); abrirPainelOpcoes(); };

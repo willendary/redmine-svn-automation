@@ -13,6 +13,29 @@ app.use((req, res, next) => {
     next();
 });
 
+// Sistema de Logs Internos
+const appLogs = [];
+function addLog(type, msg) {
+    const time = new Date().toLocaleTimeString();
+    const logStr = `[${time}] [${type}] ${msg}`;
+    appLogs.push(logStr);
+    if (appLogs.length > 1000) appLogs.shift();
+    if (type === 'ERROR' || type === 'WARN') {
+        process.stderr.write(logStr + '\n');
+    } else {
+        process.stdout.write(logStr + '\n');
+    }
+}
+
+app.get('/logs', (req, res) => {
+    res.json({ logs: appLogs });
+});
+
+app.post('/clear-logs', (req, res) => {
+    appLogs.length = 0;
+    res.json({ success: true });
+});
+
 // Promisify exec para usar async/await
 const execAsync = util.promisify(exec);
 
@@ -21,7 +44,7 @@ const REPO_BASE = 'https://repo.skyinformatica.com.br/svn/sky';
 // Helper para rodar SVN e retornar array de linhas limpas
 async function svnList(url) {
     try {
-        console.log(`[SVN] Listando: ${url}`);
+        addLog('INFO', `[SVN] Listando: ${url}`);
         const { stdout } = await execAsync(`svn list "${url}" --non-interactive`, { maxBuffer: 1024 * 1024 * 5 });
         
         // Normaliza quebras de linha e faz o split simples
@@ -34,7 +57,7 @@ async function svnList(url) {
     } catch (error) {
         // Pega apenas a primeira linha do erro para não poluir o log
         const errorMsg = error.message ? error.message.split('\n')[0] : 'Erro desconhecido';
-        console.warn(`[AVISO] Falha ao listar ${url}: ${errorMsg}`);
+        addLog('WARN', `Falha ao listar ${url}: ${errorMsg}`);
         return [];
     }
 }
@@ -88,22 +111,22 @@ app.get('/list-tags', async (req, res) => {
             return 0;
         });
 
-        console.log(`[SUCESSO] Total de tags encontradas: ${allTags.length}`);
+        addLog('INFO',`[SUCESSO] Total de tags encontradas: ${allTags.length}`);
         res.json({ tags: allTags, path: yearUrl });
 
     } catch (error) {
-        console.error(`[ERRO CRITICO] ${error.message}`);
+        addLog('ERROR',`[ERRO CRITICO] ${error.message}`);
         res.status(500).json({ error: 'Erro ao buscar tags', details: error.message });
     }
 });
 
 // Helper simples para exec callback
 function runSvnCallback(command, res, successCallback) {
-    console.log(`[CMD] ${command}`);
+    addLog('INFO',`[CMD] ${command}`);
     exec(command, { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
         if (error) {
-            console.error(`[ERRO] Falha: ${error.message}`);
-            console.error(`[STDERR] ${stderr}`);
+            addLog('ERROR',`[ERRO] Falha: ${error.message}`);
+            addLog('ERROR',`[STDERR] ${stderr}`);
             return res.status(500).json({ error: 'Erro no SVN', details: stderr || error.message });
         }
         successCallback(stdout);
@@ -131,14 +154,14 @@ app.post('/create-branch', (req, res) => {
     // Verifica se a branch JÁ EXISTE para evitar criar subpasta (bug do SVN copy em destino existente)
     checkSvnPath(branchUrl).then(exists => {
         if (exists) {
-            console.log(`[AVISO] Branch já existe: ${branchUrl}`);
+            addLog('INFO',`[AVISO] Branch já existe: ${branchUrl}`);
             return res.json({ success: true, url: branchUrl, message: "Branch já existia." });
         }
 
         const command = `svn copy "${sourceUrl}" "${branchUrl}" --parents -m "Automacao: Branch T${taskId} baseada em ${sourceTag || 'trunk'}" --non-interactive`;
 
         runSvnCallback(command, res, (stdout) => {
-            console.log(`[SUCESSO] Branch criada: ${branchUrl}`);
+            addLog('INFO',`[SUCESSO] Branch criada: ${branchUrl}`);
             res.json({ success: true, url: branchUrl, output: stdout });
         });
     });
@@ -162,7 +185,7 @@ app.get('/task-branch', async (req, res) => {
         return res.status(400).json({ found: false, error: "taskId e version são obrigatórios" });
     }
 
-    console.log(`[BUSCA] Procurando branch para T${taskId} na versão ${version}...`);
+    addLog('INFO',`[BUSCA] Procurando branch para T${taskId} na versão ${version}...`);
 
     const now = new Date();
     // Tenta nos últimos 24 meses (2 anos)
@@ -178,18 +201,27 @@ app.get('/task-branch', async (req, res) => {
         });
     }
 
-    // Função de busca (sequencial para não floodar o servidor SVN, mas pode ser paralelizada em lotes se necessário)
-    for (const date of datesToCheck) {
+    // Busca em paralelo para ser rápido
+    let foundUrl = null;
+    const promises = datesToCheck.map(async (date) => {
+        if (foundUrl) return; // Se já achou, aborta os próximos (otimização leve)
+        
         const candidateUrl = `${REPO_BASE}/branches/Financeiro/${date.year}/${date.month}/${version}/T${taskId}`;
         const exists = await checkSvnPath(candidateUrl);
         
-        if (exists) {
-            console.log(`[ENCONTRADO] ${candidateUrl}`);
-            return res.json({ found: true, url: candidateUrl });
+        if (exists && !foundUrl) {
+            foundUrl = candidateUrl;
         }
+    });
+
+    await Promise.all(promises);
+
+    if (foundUrl) {
+        addLog('INFO',`[ENCONTRADO] ${foundUrl}`);
+        return res.json({ found: true, url: foundUrl });
     }
 
-    console.log(`[NAO ENCONTRADO] Branch para T${taskId} não encontrada.`);
+    addLog('INFO',`[NAO ENCONTRADO] Branch para T${taskId} não encontrada.`);
     return res.json({ found: false });
 });
 
@@ -198,14 +230,14 @@ app.get('/branch-log', async (req, res) => {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: 'URL obrigatória' });
 
-    console.log(`[LOG] Buscando histórico de: ${url}`);
+    addLog('INFO',`[LOG] Buscando histórico de: ${url}`);
     
     // Busca os últimos 50 commits, parando na cópia (criação da branch)
     const command = `svn log "${url}" --xml --stop-on-copy --limit 50 --non-interactive`;
 
     exec(command, { maxBuffer: 1024 * 1024 * 5 }, (error, stdout, stderr) => {
         if (error) {
-            console.error(`[ERRO LOG] ${error.message}`);
+            addLog('ERROR',`[ERRO LOG] ${error.message}`);
             return res.status(500).json({ error: 'Erro ao buscar log', details: stderr || error.message });
         }
 
@@ -240,15 +272,15 @@ app.get('/merge-preview', async (req, res) => {
     const { source, target } = req.query;
     if (!source || !target) return res.status(400).json({ error: 'Source e Target obrigatórios' });
 
-    console.log(`[MERGE PREVIEW] Comparando: ${target} -> ${source}`);
+    addLog('INFO',`[MERGE PREVIEW] Comparando: ${target} -> ${source}`);
     
     // Usamos diff --summarize para ver mudanças entre URLs sem precisar de working copy
     const command = `svn diff --summarize "${target}" "${source}" --non-interactive`;
     
     exec(command, { maxBuffer: 1024 * 1024 * 5 }, (error, stdout, stderr) => {
         if (error) {
-            console.error(`[ERRO PREVIEW] ${error.message}`);
-            console.error(`[STDERR] ${stderr}`);
+            addLog('ERROR',`[ERRO PREVIEW] ${error.message}`);
+            addLog('ERROR',`[STDERR] ${stderr}`);
             return res.status(500).json({ error: 'Erro ao comparar', details: stderr || error.message });
         }
 
@@ -275,7 +307,7 @@ app.post('/execute-merge', (req, res) => {
 
     if (!source) return res.status(400).json({ error: 'Source obrigatório' });
 
-    console.log(`[MERGE TORTOISE] Abrindo interface de merge para: ${source}`);
+    addLog('INFO',`[MERGE TORTOISE] Abrindo interface de merge para: ${source}`);
     
     let args = `/command:merge /fromurl:"${source}"`;
     
@@ -294,7 +326,7 @@ app.post('/execute-merge', (req, res) => {
     
     exec(`powershell.exe -Command "${psCommand}"`, (error) => {
         if (error) {
-            console.error(`[ERRO TORTOISE] ${error.message}`);
+            addLog('ERROR',`[ERRO TORTOISE] ${error.message}`);
             return res.status(500).json({ success: false, error: error.message });
         }
         res.json({ success: true, message: "Interface do TortoiseSVN aberta." });
@@ -315,7 +347,7 @@ app.post('/open-tortoise', (req, res) => {
         args += ` /path2:"${path2}"`;
     }
 
-    console.log(`[TORTOISE] Abrindo: ${cmdType} em ${path}`);
+    addLog('INFO',`[TORTOISE] Abrindo: ${cmdType} em ${path}`);
     
     // Importante: Aspas corretas para PowerShell
     const psCommand = `Start-Process "TortoiseProc.exe" -ArgumentList '${args}'`;
@@ -328,5 +360,5 @@ app.post('/open-tortoise', (req, res) => {
 
 const PORT = 3000;
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Servidor SVN Otimizado rodando em http://localhost:${PORT}`);
+    addLog('INFO',`🚀 Servidor SVN Otimizado rodando em http://localhost:${PORT}`);
 });
