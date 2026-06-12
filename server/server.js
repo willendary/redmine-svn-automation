@@ -7,7 +7,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Permite conexões de Private Network (Localhost vindo de HTTPS externo)
+const { XMLParser } = require('fast-xml-parser');
 app.use((req, res, next) => {
     res.header('Access-Control-Allow-Private-Network', 'true');
     next();
@@ -44,15 +44,28 @@ const REPO_BASE = 'https://repo.skyinformatica.com.br/svn/sky';
 // Helper para rodar SVN e retornar array de linhas limpas
 async function svnList(url) {
     try {
-        addLog('INFO', `[SVN] Listando: ${url}`);
-        const { stdout } = await execAsync(`svn list "${url}" --non-interactive`, { maxBuffer: 1024 * 1024 * 5 });
+        addLog('INFO', `[SVN] Listando (XML): ${url}`);
+        const { stdout } = await execAsync(`svn list "${url}" --xml --non-interactive`, { maxBuffer: 1024 * 1024 * 5 });
         
-        // Normaliza quebras de linha e faz o split simples
-        const rawLines = stdout.replace(/\r\n/g, '\n').split('\n');
+        const parser = new XMLParser({
+            ignoreAttributes: false,
+            attributeNamePrefix: "@_",
+            parseTagValue: false
+        });
+        const jsonObj = parser.parse(stdout);
         
-        return rawLines
-            .map(line => line.trim())
-            .filter(line => line.length > 0);
+        if (!jsonObj.lists || !jsonObj.lists.list || !jsonObj.lists.list.entry) return [];
+        
+        const entries = Array.isArray(jsonObj.lists.list.entry) ? jsonObj.lists.list.entry : [jsonObj.lists.list.entry];
+        
+        return entries
+            .filter(e => e['@_kind'] === 'dir')
+            .map(e => ({
+                name: e.name,
+                author: e.commit.author,
+                date: e.commit.date,
+                revision: e.commit['@_revision']
+            }));
             
     } catch (error) {
         // Pega apenas a primeira linha do erro para não poluir o log
@@ -74,41 +87,39 @@ app.get('/list-tags', async (req, res) => {
         // 1. Lista os MESES (01/, 02/, etc)
         const months = await svnList(yearUrl);
         
-        // Filtra apenas diretórios (terminam com /)
-        const monthDirs = months.filter(m => m.endsWith('/'));
-
-        if (monthDirs.length === 0) {
+        if (months.length === 0) {
             return res.json({ tags: [], message: "Nenhum mês encontrado neste ano." });
         }
 
         // 2. Busca as tags dentro de cada mês (em paralelo para ser rápido)
-        const promises = monthDirs.map(async (monthDir) => {
-            const monthNum = monthDir.replace('/', ''); // "01"
+        const promises = months.map(async (monthInfo) => {
+            const monthNum = monthInfo.name; // "01"
             const monthUrl = `${yearUrl}/${monthNum}`;
             
             const tagsInMonth = await svnList(monthUrl);
             
             // Adiciona as tags encontradas
-            tagsInMonth.forEach(tagFolder => {
-                // Aceita apenas diretórios como tags
-                if (tagFolder.endsWith('/')) {
-                    const tagName = tagFolder.replace('/', '');
-                    allTags.push({
-                        value: `${monthNum}/${tagName}`, // Valor para o backend: "01/TAG"
-                        label: `${tagName} (Mês ${monthNum})` // Label visual
-                    });
-                }
+            tagsInMonth.forEach(tagInfo => {
+                const tagName = tagInfo.name;
+                allTags.push({
+                    value: `${monthNum}/${tagName}`, // Valor para o backend: "01/TAG"
+                    label: `${tagName}`, // Label visual
+                    month: monthNum,
+                    author: tagInfo.author,
+                    date: tagInfo.date,
+                    revision: tagInfo.revision
+                });
             });
         });
 
         // Aguarda todas as requisições terminarem
         await Promise.all(promises);
 
-        // 3. Ordena: Mais recentes primeiro
+        // 3. Ordena: Mais recentes primeiro pela data de criação
         allTags.sort((a, b) => {
-            if (a.label < b.label) return 1;
-            if (a.label > b.label) return -1;
-            return 0;
+            const dateA = new Date(a.date).getTime();
+            const dateB = new Date(b.date).getTime();
+            return dateB - dateA;
         });
 
         addLog('INFO',`[SUCESSO] Total de tags encontradas: ${allTags.length}`);

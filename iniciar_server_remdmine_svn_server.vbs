@@ -1,9 +1,9 @@
 Set WshShell = CreateObject("WScript.Shell")
 
-' 1. Mata processos Node antigos para evitar duplicidade
-' O comando taskkill retorna erro se não achar nada, então usamos "On Error Resume Next"
+' 1. Mata apenas o processo do servidor na porta 3000 para evitar duplicidade e nao fechar outros sistemas
 On Error Resume Next
-WshShell.Run "taskkill /f /im node.exe", 0, True
+strKillCmd = "cmd /c for /f ""tokens=5"" %a in ('netstat -aon ^| find "":3000"" ^| find ""LISTENING""') do taskkill /f /pid %a"
+WshShell.Run strKillCmd, 0, True
 On Error GoTo 0
 
 ' Pequena pausa para garantir a liberação da porta

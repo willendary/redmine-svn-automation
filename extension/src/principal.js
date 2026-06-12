@@ -202,9 +202,9 @@ function criarModalBranch() {
                     </div>
                     <div class="svn-field">
                         <label>Basear na Tag (Ano <span id="svn-year-display"></span>)</label>
-                        <select id="svn-tags" class="svn-input">
-                            <option value="">Carregando...</option>
-                        </select>
+                        <div id="sky-tag-selector-container"></div>
+                        <input type="hidden" id="svn-tags" value="">
+                        <div id="sky-selected-tag-preview" class="sky-selected-preview"></div>
                     </div>
                 </div>
                 <div id="svn-footer">
@@ -240,23 +240,129 @@ function abrirModalBranch() {
 function fecharModalBranch() { document.getElementById('svn-overlay').style.display = 'none'; }
 
 function carregarTagsSvn(ano) {
-    const select = document.getElementById('svn-tags');
-    select.innerHTML = '<option value="">Carregando tags...</option>';
-    select.disabled = true;
+    const container = document.getElementById('sky-tag-selector-container');
+    const inputHidden = document.getElementById('svn-tags');
+    const preview = document.getElementById('sky-selected-tag-preview');
+    const btnSubmit = document.getElementById('svn-submit');
+    
+    container.innerHTML = `
+        <div class="sky-custom-select">
+            <div id="sky-select-trigger" class="sky-select-trigger disabled">Carregando tags...</div>
+            <div id="sky-dropdown-panel" class="sky-dropdown-panel">
+                <div class="sky-dropdown-search">
+                    <input type="text" id="sky-dropdown-search-input" placeholder="Buscar tag (ex: 2026.05)...">
+                </div>
+                <div id="sky-dropdown-list" class="sky-dropdown-list">
+                    <div style="padding: 10px; text-align: center; color: #64748b; font-size: 13px;">Carregando...</div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    btnSubmit.disabled = true;
+
     fetch(`http://localhost:3000/list-tags?year=${ano}`)
         .then(r => r.json())
         .then(data => {
-            select.innerHTML = '<option value="">-- Trunk (Padrão) --</option>';
-            if (data.tags) {
-                data.tags.forEach(t => {
-                    const opt = document.createElement('option');
-                    opt.value = t.value;
-                    opt.innerText = t.label;
-                    select.appendChild(opt);
+            const trigger = document.getElementById('sky-select-trigger');
+            const panel = document.getElementById('sky-dropdown-panel');
+            const searchInput = document.getElementById('sky-dropdown-search-input');
+            const list = document.getElementById('sky-dropdown-list');
+            
+            trigger.classList.remove('disabled');
+            trigger.innerText = 'Selecione uma Tag (Opcional)';
+
+            let tagsHtml = `
+                <div class="sky-dropdown-item" data-value="" data-label="Trunk">
+                    <span class="sky-tag-title">-- Trunk (Padrão) --</span>
+                    <span class="sky-tag-meta">Cria a branch a partir do trunk atual</span>
+                </div>
+            `;
+
+            if (data.tags && data.tags.length > 0) {
+                data.tags.forEach((t, index) => {
+                    // Trata data
+                    let dateStr = 'Data desconhecida';
+                    if (t.date) {
+                        const d = new Date(t.date);
+                        dateStr = d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+                    }
+                    
+                    const isLatest = index === 0;
+                    const badge = isLatest ? '<span class="sky-tag-latest-badge">ÚLTIMA CRIADA</span>' : '';
+                    const authorStr = t.author ? `por ${t.author}` : '';
+
+                    tagsHtml += `
+                        <div class="sky-dropdown-item" data-value="${t.value}" data-label="${t.label}" data-author="${t.author || ''}" data-date="${dateStr}">
+                            <span class="sky-tag-title">${t.label} ${badge}</span>
+                            <span class="sky-tag-meta">Criada em ${dateStr} ${authorStr}</span>
+                        </div>
+                    `;
                 });
+            } else {
+                tagsHtml += '<div style="padding: 10px; color: #ef4444; font-size: 13px;">Nenhuma tag encontrada neste ano.</div>';
             }
+
+            list.innerHTML = tagsHtml;
+            btnSubmit.disabled = false;
+
+            // Logica do Dropdown
+            trigger.onclick = (e) => {
+                e.stopPropagation();
+                const isOpen = panel.classList.contains('open');
+                document.querySelectorAll('.sky-dropdown-panel').forEach(p => p.classList.remove('open'));
+                if (!isOpen) {
+                    panel.classList.add('open');
+                    searchInput.focus();
+                }
+            };
+
+            // Fechar ao clicar fora
+            document.addEventListener('click', (e) => {
+                if (!container.contains(e.target)) {
+                    panel.classList.remove('open');
+                }
+            });
+
+            // Busca
+            searchInput.oninput = (e) => {
+                const term = e.target.value.toLowerCase();
+                const items = list.querySelectorAll('.sky-dropdown-item');
+                items.forEach(item => {
+                    const text = item.innerText.toLowerCase();
+                    item.style.display = text.includes(term) ? 'block' : 'none';
+                });
+            };
+
+            // Seleção
+            list.onclick = (e) => {
+                const item = e.target.closest('.sky-dropdown-item');
+                if (!item) return;
+
+                const value = item.getAttribute('data-value');
+                const label = item.getAttribute('data-label');
+                const author = item.getAttribute('data-author');
+                const date = item.getAttribute('data-date');
+
+                list.querySelectorAll('.sky-dropdown-item').forEach(i => i.classList.remove('selected'));
+                item.classList.add('selected');
+
+                trigger.innerText = label === 'Trunk' ? '-- Trunk (Padrão) --' : label;
+                inputHidden.value = value;
+                
+                if (value === "") {
+                    preview.innerHTML = '';
+                } else {
+                    preview.innerHTML = `Selecionado: <strong>${label}</strong><br><span style="color:#475569;font-size:11px;">(Criada em ${date} ${author ? 'por ' + author : ''})</span>`;
+                }
+
+                panel.classList.remove('open');
+            };
         })
-        .finally(() => { select.disabled = false; });
+        .catch(err => {
+            document.getElementById('sky-select-trigger').innerText = 'Erro ao carregar tags';
+            console.error(err);
+        });
 }
 
 function enviarFormularioBranch() {

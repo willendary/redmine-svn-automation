@@ -116,7 +116,62 @@ const ESTILOS_SKY = `
     .sky-blink { animation: sky-blink 1s infinite; }
     @keyframes sky-blink { 50% { opacity: 0.5; } }
 
-    /* Estilos da Lista (Minha Página) */
+    /* Custom Dropdown Styles */
+    .sky-custom-select {
+        position: relative;
+        width: 100%;
+    }
+    .sky-select-trigger {
+        width: 100%; padding: 8px 12px !important;
+        border: 1px solid #cbd5e1;
+        border-radius: 4px; font-size: 14px;
+        color: #334155; box-sizing: border-box;
+        background-color: #fff; cursor: pointer;
+        display: flex; justify-content: space-between; align-items: center;
+        height: 40px;
+    }
+    .sky-select-trigger::after {
+        content: "▼";
+        font-size: 10px; color: #64748b;
+    }
+    .sky-select-trigger.disabled { background-color: #f8fafc; cursor: not-allowed; color: #94a3b8; }
+    .sky-dropdown-panel {
+        position: absolute; top: 100%; left: 0; right: 0;
+        background: #fff; border: 1px solid #cbd5e1;
+        border-radius: 4px; margin-top: 4px; z-index: 1000;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        display: none; flex-direction: column;
+        height: 350px; min-height: 200px; max-height: 80vh;
+        resize: vertical; overflow: hidden;
+    }
+    .sky-dropdown-panel.open { display: flex; }
+    .sky-dropdown-search {
+        padding: 10px; border-bottom: 1px solid #e2e8f0; background: #f8fafc;
+    }
+    .sky-dropdown-search input {
+        width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1;
+        border-radius: 4px; font-size: 13px; box-sizing: border-box; outline: none;
+    }
+    .sky-dropdown-search input:focus { border-color: #3b82f6; }
+    .sky-dropdown-list {
+        overflow-y: auto; flex: 1;
+    }
+    .sky-dropdown-item {
+        padding: 10px 12px; border-bottom: 1px solid #f1f5f9; cursor: pointer;
+    }
+    .sky-dropdown-item:hover { background-color: #f8fafc; }
+    .sky-dropdown-item.selected { background-color: #eff6ff; }
+    .sky-tag-title { font-weight: 600; color: #0f172a; font-size: 14px; display: block;}
+    .sky-tag-meta { font-size: 11px; color: #64748b; display: block; margin-top: 4px;}
+    .sky-tag-latest-badge {
+        background-color: #22c55e; color: #fff; font-size: 10px;
+        padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-left: 8px; vertical-align: middle;
+    }
+    .sky-selected-preview {
+        font-size: 12px; color: #16a34a; margin-top: 8px; font-weight: 500; min-height: 18px;
+    }
+
+    /* Estilos da Lista (Minha PÃ¡gina) */
     .sky-list-action {
         margin-right: 8px; cursor: pointer; text-decoration: none; border: none; background: none; font-size: 14px;
         vertical-align: middle; display: inline-block; width: 20px; text-align: center;
