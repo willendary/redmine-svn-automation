@@ -41,6 +41,21 @@ const execAsync = util.promisify(exec);
 
 const REPO_BASE = 'https://repo.skyinformatica.com.br/svn/sky';
 
+const PROJECTS = {
+    financeiro: {
+        branch: 'Financeiro',
+        tag: 'financeiro'
+    },
+    skyboletos: {
+        branch: 'SkyBoletos',
+        tag: 'skyboletos'
+    },
+    paineleletronico: {
+        branch: 'PainelEletronico',
+        tag: 'PainelEletronico'
+    }
+};
+
 // Helper para rodar SVN e retornar array de linhas limpas
 async function svnList(url) {
     try {
@@ -77,33 +92,51 @@ async function svnList(url) {
 
 // Rota OTIMIZADA para listar tags (Year -> Month -> Tags)
 app.get('/list-tags', async (req, res) => {
-    const { year } = req.query;
+    let { year, project } = req.query;
     if (!year) return res.status(400).json({ error: 'Ano obrigatório' });
 
-    const yearUrl = `${REPO_BASE}/tags/financeiro/${year}`;
+    const initialYear = year;
+    const projectKey = (project || 'financeiro').toLowerCase();
+
+    const tagProject = PROJECTS[projectKey]?.tag || projectKey;
+
+    let yearUrl = `${REPO_BASE}/tags/${tagProject}/${year}`;
     const allTags = [];
+    let message = "";
 
     try {
-        // 1. Lista os MESES (01/, 02/, etc)
-        const months = await svnList(yearUrl);
+        // 1. Tenta listar os MESES no ano atual
+        let months = await svnList(yearUrl);
         
+        // 2. Se não encontrou, tenta no ano anterior
         if (months.length === 0) {
-            return res.json({ tags: [], message: "Nenhum mês encontrado neste ano." });
+            addLog('WARN', `Nenhuma tag encontrada para ${tagProject} em ${year}. Tentando ano anterior.`);
+            year = String(parseInt(year) - 1);
+            yearUrl = `${REPO_BASE}/tags/${tagProject}/${year}`;
+            months = await svnList(yearUrl);
+
+            if (months.length > 0) {
+                message = `Nenhuma tag encontrada em ${initialYear}. Mostrando resultados de ${year}.`;
+            }
         }
 
-        // 2. Busca as tags dentro de cada mês (em paralelo para ser rápido)
+        if (months.length === 0) {
+            return res.json({ tags: [], message: `Nenhuma tag encontrada para ${tagProject} em ${initialYear} ou ${year}.` });
+        }
+
+        // 3. Busca as tags dentro de cada mês (em paralelo para ser rápido)
         const promises = months.map(async (monthInfo) => {
             const monthNum = monthInfo.name; // "01"
             const monthUrl = `${yearUrl}/${monthNum}`;
             
             const tagsInMonth = await svnList(monthUrl);
             
-            // Adiciona as tags encontradas
             tagsInMonth.forEach(tagInfo => {
                 const tagName = tagInfo.name;
                 allTags.push({
-                    value: `${monthNum}/${tagName}`, // Valor para o backend: "01/TAG"
+                    value: `${year}/${monthNum}/${tagName}`, // Valor para o backend: "ANO/MES/TAG"
                     label: `${tagName}`, // Label visual
+                    year: year, // Adiciona o ano para referência
                     month: monthNum,
                     author: tagInfo.author,
                     date: tagInfo.date,
@@ -112,18 +145,12 @@ app.get('/list-tags', async (req, res) => {
             });
         });
 
-        // Aguarda todas as requisições terminarem
         await Promise.all(promises);
 
-        // 3. Ordena: Mais recentes primeiro pela data de criação
-        allTags.sort((a, b) => {
-            const dateA = new Date(a.date).getTime();
-            const dateB = new Date(b.date).getTime();
-            return dateB - dateA;
-        });
+        allTags.sort((a, b) => new Date(b.date) - new Date(a.date));
 
         addLog('INFO',`[SUCESSO] Total de tags encontradas: ${allTags.length}`);
-        res.json({ tags: allTags, path: yearUrl });
+        res.json({ tags: allTags, path: yearUrl, message });
 
     } catch (error) {
         addLog('ERROR',`[ERRO CRITICO] ${error.message}`);
@@ -146,7 +173,7 @@ function runSvnCallback(command, res, successCallback) {
 
 // Rota de Criação de Branch
 app.post('/create-branch', (req, res) => {
-    const { taskId, version, sourceTag, year } = req.body;
+    const { taskId, version, sourceTag, year, project } = req.body;
 
     if (!taskId || !version) return res.status(400).json({ error: 'Faltam dados' });
 
@@ -157,10 +184,17 @@ app.post('/create-branch', (req, res) => {
     let sourceUrl = `${REPO_BASE}/trunk`;
     
     if (sourceTag) {
-        sourceUrl = `${REPO_BASE}/tags/financeiro/${year}/${sourceTag}`;
+        const projectKey = (project || 'financeiro').toLowerCase();
+
+        const tagProject = PROJECTS[projectKey]?.tag || projectKey;
+
+        sourceUrl = `${REPO_BASE}/tags/${tagProject}/${sourceTag}`;
     }
 
-    const branchUrl = `${REPO_BASE}/branches/Financeiro/${cYear}/${cMonth}/${version}/T${taskId}`;
+    const projectKey = (project || 'financeiro').toLowerCase();
+
+    const branchProject = PROJECTS[projectKey]?.branch || 'Financeiro';
+    const branchUrl = `${REPO_BASE}/branches/${branchProject}/${cYear}/${cMonth}/${version}/T${taskId}`;
     
     // Verifica se a branch JÁ EXISTE para evitar criar subpasta (bug do SVN copy em destino existente)
     checkSvnPath(branchUrl).then(exists => {
@@ -216,13 +250,21 @@ app.get('/task-branch', async (req, res) => {
     let foundUrl = null;
     const promises = datesToCheck.map(async (date) => {
         if (foundUrl) return; // Se já achou, aborta os próximos (otimização leve)
-        
-        const candidateUrl = `${REPO_BASE}/branches/Financeiro/${date.year}/${date.month}/${version}/T${taskId}`;
+
+    for (const projectInfo of Object.values(PROJECTS)) {
+
+        const branchProject = projectInfo.branch;
+
+        const candidateUrl =
+            `${REPO_BASE}/branches/${branchProject}/${date.year}/${date.month}/${version}/T${taskId}`;
+
         const exists = await checkSvnPath(candidateUrl);
-        
+
         if (exists && !foundUrl) {
             foundUrl = candidateUrl;
+            return;
         }
+    }
     });
 
     await Promise.all(promises);

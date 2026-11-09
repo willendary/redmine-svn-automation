@@ -196,6 +196,14 @@ function criarModalBranch() {
                             <input id="svn-task" class="svn-input" readonly>
                         </div>
                         <div class="svn-field" style="flex: 1;">
+                            <label>Projeto</label>
+                            <select id="svn-project" class="svn-input" style="width: 100%; box-sizing: border-box; padding: 6px;">
+                                <option value="financeiro">Financeiro</option>
+                                <option value="skyboletos">Sky Boletos</option>
+                                <option value="paineleletronico">Painel Eletrônico</option>
+                            </select>
+                        </div>
+                        <div class="svn-field" style="flex: 1;">
                             <label>Versão Destino</label>
                             <input id="svn-version" class="svn-input">
                         </div>
@@ -234,12 +242,17 @@ function abrirModalBranch() {
     document.getElementById('svn-version').value = versao;
     document.getElementById('svn-year-display').innerText = ano;
     document.getElementById('svn-overlay').style.display = 'flex';
-    carregarTagsSvn(ano);
+    const elProject = document.getElementById('svn-project');
+    carregarTagsSvn(ano, elProject.value);
+
+    elProject.onchange = (e) => {
+        carregarTagsSvn(ano, e.target.value);
+    };
 }
 
 function fecharModalBranch() { document.getElementById('svn-overlay').style.display = 'none'; }
 
-function carregarTagsSvn(ano) {
+function carregarTagsSvn(ano, projeto) {
     const container = document.getElementById('sky-tag-selector-container');
     const inputHidden = document.getElementById('svn-tags');
     const preview = document.getElementById('sky-selected-tag-preview');
@@ -261,7 +274,7 @@ function carregarTagsSvn(ano) {
     
     btnSubmit.disabled = true;
 
-    fetch(`http://localhost:3000/list-tags?year=${ano}`)
+    fetch(`http://localhost:3000/list-tags?year=${ano}&project=${projeto || 'financeiro'}`)
         .then(r => r.json())
         .then(data => {
             const trigger = document.getElementById('sky-select-trigger');
@@ -370,10 +383,11 @@ function enviarFormularioBranch() {
     const version = document.getElementById('svn-version').value;
     const sourceTag = document.getElementById('svn-tags').value;
     const year = document.getElementById('svn-year-display').innerText;
+    const project = document.getElementById('svn-project').value;
     fetch("http://localhost:3000/create-branch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ taskId, version, sourceTag, year })
+        body: JSON.stringify({ taskId, version, sourceTag, year, project })
     })
     .then(r => r.json())
     .then(data => {
