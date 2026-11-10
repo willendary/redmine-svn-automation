@@ -487,7 +487,7 @@ function abrirModalDeMerge(urlOrigem) {
     const overlay = document.getElementById('svn-merge-overlay');
     overlay.style.cssText = "position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 100000; display: flex; justify-content: center; align-items: center; backdrop-filter: blur(2px);";
     const idTarefa = window.location.pathname.split('/').pop();
-    document.getElementById('merge-comment').value = `Merge T#${idTarefa}: `;
+    document.getElementById('merge-comment').value = `Merge T #${idTarefa}: `;
     document.getElementById('svn-merge-close').onclick = () => overlay.remove();
     document.getElementById('svn-merge-cancel').onclick = () => overlay.remove();
     document.getElementById('svn-merge-submit').onclick = () => executarMerge(urlOrigem, urlDestino);

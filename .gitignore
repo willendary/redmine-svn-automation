@@ -13,3 +13,6 @@ Thumbs.db
 # Pastas de build (se houver)
 dist/
 build/
+
+# Configuração local (contém API key do Redmine)
+server/config.json

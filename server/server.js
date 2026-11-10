@@ -1,7 +1,11 @@
 const express = require('express');
 const cors = require('cors');
-const { exec } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const { exec, spawn } = require('child_process');
 const util = require('util');
+const { REPO_BASE, PROJECTS } = require('./projetos');
+const mergePendentes = require('./merge_pendentes');
 const app = express();
 
 app.use(cors());
@@ -39,22 +43,53 @@ app.post('/clear-logs', (req, res) => {
 // Promisify exec para usar async/await
 const execAsync = util.promisify(exec);
 
-const REPO_BASE = 'https://repo.skyinformatica.com.br/svn/sky';
+mergePendentes.definirLogger(addLog);
 
-const PROJECTS = {
-    financeiro: {
-        branch: 'Financeiro',
-        tag: 'financeiro'
-    },
-    skyboletos: {
-        branch: 'SkyBoletos',
-        tag: 'skyboletos'
-    },
-    paineleletronico: {
-        branch: 'PainelEletronico',
-        tag: 'PainelEletronico'
+// Arquivos estáticos (tela de pendentes de merge)
+app.use(express.static(path.join(__dirname, 'public')));
+
+app.get('/', (req, res) => res.redirect('/pendentes'));
+app.get('/pendentes', (req, res) => res.sendFile(path.join(__dirname, 'public', 'pendentes.html')));
+
+// Configuração do Redmine usada pela tela de pendentes
+app.get('/config-redmine', (req, res) => {
+    const config = mergePendentes.lerConfigRedmine();
+    res.json({ configurado: Boolean(config.apiKey), url: config.url });
+});
+
+app.post('/config-redmine', async (req, res) => {
+    try {
+        const usuario = await mergePendentes.salvarConfigRedmine(req.body || {});
+        addLog('INFO', `[CONFIG] API key do Redmine validada para ${usuario.login || usuario.name}`);
+        res.json({ success: true, usuario: usuario.name || usuario.login || '' });
+    } catch (erro) {
+        addLog('WARN', `[CONFIG] Falha ao salvar configuração do Redmine: ${erro.message}`);
+        res.status(400).json({ error: erro.message });
     }
-};
+});
+
+// Tarefas com revisões no SVN ainda não mescladas no trunk
+app.get('/merge-pendentes', async (req, res) => {
+    try {
+        const anos = String(req.query.years || new Date().getFullYear())
+            .split(',')
+            .map(Number)
+            .filter(ano => ano >= 2000 && ano <= 2100);
+
+        const projetos = String(req.query.projects || Object.keys(PROJECTS).join(','))
+            .split(',')
+            .filter(projeto => PROJECTS[projeto]);
+
+        if (anos.length === 0) return res.status(400).json({ error: 'Ano inválido' });
+        if (projetos.length === 0) return res.status(400).json({ error: 'Projeto inválido' });
+
+        const dados = await mergePendentes.coletarPendentes({ anos, projetos });
+        res.json(dados);
+    } catch (erro) {
+        addLog('ERROR', `[MERGE] ${erro.message}`);
+        res.status(500).json({ error: 'Erro ao buscar pendentes de merge', details: erro.message });
+    }
+});
 
 // Helper para rodar SVN e retornar array de linhas limpas
 async function svnList(url) {
@@ -354,64 +389,121 @@ app.get('/merge-preview', async (req, res) => {
     });
 });
 
+// Abre o TortoiseProc direto, sem PowerShell (Kaspersky bloqueia Start-Process a partir de script JS).
+function caminhoTortoiseProc() {
+    const candidatos = [
+        process.env.ProgramFiles && path.join(process.env.ProgramFiles, 'TortoiseSVN', 'bin', 'TortoiseProc.exe'),
+        process.env['ProgramFiles(x86)'] && path.join(process.env['ProgramFiles(x86)'], 'TortoiseSVN', 'bin', 'TortoiseProc.exe'),
+        'C:\\Program Files\\TortoiseSVN\\bin\\TortoiseProc.exe'
+    ].filter(Boolean);
+
+    return candidatos.find(caminho => fs.existsSync(caminho)) || 'TortoiseProc.exe';
+}
+
+function abrirTortoise(args) {
+    return new Promise((resolve, reject) => {
+        const processo = spawn(caminhoTortoiseProc(), args, { detached: true, stdio: 'ignore' });
+        processo.once('error', reject);
+        processo.once('spawn', () => {
+            processo.unref();
+            resolve();
+        });
+    });
+}
+
 // Rota para executar o merge (Via Tortoise para maior segurança e suporte a Working Copy)
-app.post('/execute-merge', (req, res) => {
+app.post('/execute-merge', async (req, res) => {
     const { source, target, revisions } = req.body;
 
     if (!source) return res.status(400).json({ error: 'Source obrigatório' });
-
-    addLog('INFO',`[MERGE TORTOISE] Abrindo interface de merge para: ${source}`);
-    
-    let args = `/command:merge /fromurl:"${source}"`;
-    
-    if (revisions && revisions.length > 0) {
-        const revList = revisions.join(',');
-        args += ` /revlist:"${revList}"`;
+    if (!target || target.startsWith('http')) {
+        return res.status(400).json({ error: 'Informe o caminho local do Trunk.' });
     }
 
-    // Se tivermos o target e ele for uma URL, o Tortoise vai pedir o caminho local (WC)
-    // Se o target fosse um caminho local, o Tortoise já saberia onde aplicar.
-    if (target && !target.startsWith('http')) {
-        args += ` /path:"${target}"`;
+    const args = ['/command:merge', `/path:${target}`, `/fromurl:${source}`];
+    const revrange = mergePendentes.agruparRevisoes(revisions);
+    if (revrange) args.push(`/revrange:${revrange}`);
+
+    addLog('INFO', `[MERGE TORTOISE] Abrindo merge: ${source} -> ${target} (${revrange || 'todas'})`);
+
+    try {
+        await abrirTortoise(args);
+        res.json({ success: true, message: 'Interface do TortoiseSVN aberta.' });
+    } catch (erro) {
+        addLog('ERROR', `[ERRO TORTOISE] ${erro.message}`);
+        res.status(500).json({ success: false, error: `Não foi possível abrir o TortoiseSVN: ${erro.message}` });
+    }
+});
+
+// Confere se o conteúdo das revisões pendentes já está no trunk (arquivo a arquivo)
+app.get('/verificar-conteudo', async (req, res) => {
+    const { branchUrl } = req.query;
+    const revisoes = String(req.query.revisoes || '')
+        .split(',')
+        .map(Number)
+        .filter(Number.isFinite);
+
+    if (!branchUrl) return res.status(400).json({ error: 'branchUrl é obrigatório.' });
+    if (!String(branchUrl).startsWith(`${REPO_BASE}/branches/`)) {
+        return res.status(400).json({ error: 'URL da branch inválida.' });
     }
 
-    const psCommand = `Start-Process "TortoiseProc.exe" -ArgumentList '${args}'`;
-    
-    exec(`powershell.exe -Command "${psCommand}"`, (error) => {
-        if (error) {
-            addLog('ERROR',`[ERRO TORTOISE] ${error.message}`);
-            return res.status(500).json({ success: false, error: error.message });
-        }
-        res.json({ success: true, message: "Interface do TortoiseSVN aberta." });
-    });
+    addLog('INFO', `[MERGE] Verificando conteúdo: ${branchUrl} (${revisoes.join(',') || 'sem revisões'})`);
+
+    try {
+        const resultado = await mergePendentes.verificarConteudo({ branchUrl, revisoes });
+        res.json({ success: true, ...resultado });
+    } catch (erro) {
+        addLog('ERROR', `[MERGE] Falha na verificação de ${branchUrl}: ${erro.message}`);
+        res.status(500).json({ error: erro.message });
+    }
+});
+
+// Marca a branch como mesclada no mergeinfo do trunk (record-only) e commita só a propriedade
+app.post('/marcar-mesclada', async (req, res) => {
+    const { taskId, branchUrl, revisoes } = req.body || {};
+    const id = String(taskId || '').replace(/\D/g, '');
+
+    if (!branchUrl || !Array.isArray(revisoes) || revisoes.length === 0) {
+        return res.status(400).json({ error: 'branchUrl e revisoes são obrigatórios.' });
+    }
+
+    if (!String(branchUrl).startsWith(`${REPO_BASE}/branches/`)) {
+        return res.status(400).json({ error: 'URL da branch inválida.' });
+    }
+
+    const mensagem = `Merge T #${id}`;
+    addLog('INFO', `[MERGE] Marcando T#${id} como mesclada (record-only): ${revisoes.join(',')}`);
+
+    try {
+        const resultado = await mergePendentes.marcarComoMesclada({ branchUrl, revisoes, mensagem });
+        addLog('INFO', `[MERGE] T#${id}: ${resultado.saida}`);
+        res.json({ success: true, ...resultado });
+    } catch (erro) {
+        addLog('ERROR', `[MERGE] Falha ao marcar T#${id}: ${erro.message}`);
+        res.status(500).json({ error: erro.message });
+    }
 });
 
 // Utilitário para abrir o TortoiseSVN (Log ou Diff)
-app.post('/open-tortoise', (req, res) => {
-    const { command, path, path2 } = req.body;
-    
-    // command: 'log', 'diff', 'merge', etc.
-    // path: url ou caminho local
-    
-    const cmdType = command || 'log';
-    let args = `/command:${cmdType} /path:"${path}"`;
-    
-    if (path2) {
-        args += ` /path2:"${path2}"`;
-    }
+app.post('/open-tortoise', async (req, res) => {
+    const { command, path: alvo, path2 } = req.body;
 
-    addLog('INFO',`[TORTOISE] Abrindo: ${cmdType} em ${path}`);
-    
-    // Importante: Aspas corretas para PowerShell
-    const psCommand = `Start-Process "TortoiseProc.exe" -ArgumentList '${args}'`;
-    
-    exec(`powershell.exe -Command "${psCommand}"`, (error) => {
-        if (error) return res.status(500).json({ success: false, error: error.message });
+    const cmdType = command || 'log';
+    const args = [`/command:${cmdType}`, `/path:${alvo}`];
+    if (path2) args.push(`/path2:${path2}`);
+
+    addLog('INFO', `[TORTOISE] Abrindo: ${cmdType} em ${alvo}`);
+
+    try {
+        await abrirTortoise(args);
         res.json({ success: true });
-    });
+    } catch (erro) {
+        res.status(500).json({ success: false, error: erro.message });
+    }
 });
 
-const PORT = 3000;
-app.listen(PORT, '0.0.0.0', () => {
+const PORT = Number(process.env.PORT) || 3000;
+app.listen(PORT, '127.0.0.1', () => {
     addLog('INFO',`🚀 Servidor SVN Otimizado rodando em http://localhost:${PORT}`);
 });
