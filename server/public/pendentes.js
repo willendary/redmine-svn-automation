@@ -4,21 +4,47 @@ const PROJETOS_LABEL = {
     paineleletronico: 'Painel Eletrônico'
 };
 
+const CHAVE_FILTROS = 'sky_merge_filtros';
+
+function lerFiltrosSalvos() {
+    try {
+        const filtros = JSON.parse(localStorage.getItem(CHAVE_FILTROS) || '{}');
+        return filtros && typeof filtros === 'object' && !Array.isArray(filtros) ? filtros : {};
+    } catch (e) {
+        return {};
+    }
+}
+
+const filtrosSalvos = lerFiltrosSalvos();
 const estado = {
     dados: null,
     carregando: false,
-    autor: localStorage.getItem('sky_merge_autor') || 'willian.oliveira',
-    sistema: 'todos',
-    ano: String(localStorage.getItem('sky_merge_ano') || new Date().getFullYear()),
-    situacao: 'todos',
-    versao: 'todas',
-    somenteProntas: false,
-    busca: '',
-    mostrarMescladas: false,
+    responsavel: filtrosSalvos.responsavel || localStorage.getItem('sky_merge_responsavel') || 'todos',
+    sistema: filtrosSalvos.sistema || 'todos',
+    ano: String(filtrosSalvos.ano || localStorage.getItem('sky_merge_ano') || new Date().getFullYear()),
+    situacao: filtrosSalvos.situacao || 'todos',
+    versao: filtrosSalvos.versao || 'todas',
+    somenteProntas: filtrosSalvos.somenteProntas === true,
+    busca: typeof filtrosSalvos.busca === 'string' ? filtrosSalvos.busca : '',
+    mostrarMescladas: filtrosSalvos.mostrarMescladas === true,
     branchMerge: null
 };
 
 const el = id => document.getElementById(id);
+
+function salvarFiltros() {
+    const filtros = {
+        responsavel: estado.responsavel,
+        sistema: estado.sistema,
+        ano: estado.ano,
+        situacao: estado.situacao,
+        versao: estado.versao,
+        somenteProntas: estado.somenteProntas,
+        busca: estado.busca,
+        mostrarMescladas: estado.mostrarMescladas
+    };
+    localStorage.setItem(CHAVE_FILTROS, JSON.stringify(filtros));
+}
 
 function escapar(valor) {
     return String(valor == null ? '' : valor).replace(/[&<>"']/g, caractere => ({
@@ -103,11 +129,13 @@ async function carregar() {
         if (dados.redmine && !dados.redmine.configurado) mostrarCardConfig(true);
         if (dados.redmine && dados.redmine.erro) mostrarAviso(`Redmine: ${dados.redmine.erro}`, true);
 
-        preencherAutores();
+        preencherResponsaveis();
         preencherSituacoes();
         renderizar();
     } catch (e) {
         mostrarAviso(`Erro ao carregar pendentes: ${e.message}`, true);
+        el('tabela-contagem').textContent = estado.dados ? 'Exibindo a última consulta disponível.' : 'Dados indisponíveis. Use Atualizar pendências para tentar novamente.';
+        el('ultima-atualizacao').textContent = 'Falha na atualização';
     } finally {
         estado.carregando = false;
         el('btn-atualizar').disabled = false;
@@ -116,21 +144,17 @@ async function carregar() {
     }
 }
 
-function preencherAutores() {
-    const select = el('filtro-autor');
-    const autores = estado.dados?.autores || [];
-    const atual = select.value || estado.autor;
-
-    select.innerHTML = '<option value="todos">Todos</option>' + autores.map(autor =>
-        `<option value="${escapar(autor)}">${escapar(autor)}</option>`
+function preencherResponsaveis() {
+    const select = el('filtro-responsavel');
+    const responsaveis = estado.dados?.responsaveis || [];
+    select.innerHTML = '<option value="todos">Todos</option>' + responsaveis.map(responsavel =>
+        `<option value="${escapar(responsavel)}">${escapar(responsavel)}</option>`
     ).join('');
 
-    const salvo = localStorage.getItem('sky_merge_autor') || 'willian.oliveira';
-    let escolhido = autores.includes(atual) ? atual : salvo;
-    if (!autores.includes(escolhido)) escolhido = 'todos';
+    const escolhido = responsaveis.includes(estado.responsavel) ? estado.responsavel : 'todos';
 
     select.value = escolhido;
-    estado.autor = escolhido;
+    estado.responsavel = escolhido;
 }
 
 function preencherSituacoes() {
@@ -147,12 +171,26 @@ function preencherSituacoes() {
     estado.situacao = select.value;
 }
 
+function restaurarFiltrosEstaticos() {
+    const sistemas = [...el('filtro-sistema').options].map(opcao => opcao.value);
+    estado.sistema = sistemas.includes(estado.sistema) ? estado.sistema : 'todos';
+    el('filtro-sistema').value = estado.sistema;
+
+    const versoes = [...el('filtro-versao').options].map(opcao => opcao.value);
+    estado.versao = versoes.includes(estado.versao) ? estado.versao : 'todas';
+    el('filtro-versao').value = estado.versao;
+
+    el('filtro-prontas').checked = estado.somenteProntas;
+    el('filtro-busca').value = estado.busca;
+    el('filtro-mescladas').checked = estado.mostrarMescladas;
+}
+
 function branchesFiltradas() {
     const busca = estado.busca.toLowerCase();
 
     return (estado.dados?.branches || []).filter(branch => {
         if (!estado.mostrarMescladas && (branch.status === 'mesclado' || branch.status === 'sem-commit')) return false;
-        if (estado.autor !== 'todos' && !branch.revisoes.some(revisao => revisao.autor === estado.autor)) return false;
+        if (estado.responsavel !== 'todos' && branch.tarefa?.responsavel !== estado.responsavel) return false;
         if (estado.sistema !== 'todos' && branch.sistema !== estado.sistema) return false;
         if (estado.situacao !== 'todos' && branch.tarefa?.status !== estado.situacao) return false;
 
@@ -198,24 +236,21 @@ function renderizar() {
 
 function renderizarResumo(branches) {
     const pendentes = branches.reduce((total, branch) => total + branch.pendentes.length, 0);
-    const porSistema = branches.reduce((mapa, branch) => {
-        mapa[branch.sistema] = (mapa[branch.sistema] || 0) + 1;
-        return mapa;
-    }, {});
-
-    const gerado = estado.dados?.geradoEm ? `Atualizado em ${formatarData(estado.dados.geradoEm)}` : '';
-    const partes = [
-        `<span class="chip">Tarefas: <strong>${branches.length}</strong></span>`,
-        `<span class="chip destaque">Revisões pendentes: <strong>${pendentes}</strong></span>`
+    const prontas = branches.filter(branch => branch.pendentes.length > 0 && (branch.tarefa?.fechada || branch.tarefa?.versaoTeste)).length;
+    const sistemas = new Set(branches.map(branch => branch.sistema)).size;
+    const icon = nome => window.SkyUI ? window.SkyUI.icon(nome) : '';
+    const metricas = [
+        ['Tarefas na fila', branches.length, 'branches nos filtros atuais', 'tasks', ''],
+        ['Revisões pendentes', pendentes, 'alterações aguardando merge', 'branch', ' destaque'],
+        ['Prontas para merge', prontas, 'fechadas ou com versão de teste', 'check', ''],
+        ['Sistemas envolvidos', sistemas, 'projetos nos filtros atuais', 'grid', '']
     ];
-
-    for (const [sistema, total] of Object.entries(porSistema)) {
-        partes.push(`<span class="chip">${escapar(PROJETOS_LABEL[sistema] || sistema)}: <strong>${total}</strong></span>`);
-    }
-
-    if (gerado) partes.push(`<span class="chip">${escapar(gerado)}</span>`);
-
-    el('resumo').innerHTML = partes.join('');
+    el('resumo').innerHTML = metricas.map(([titulo, valor, nota, simbolo, classe]) =>
+        '<div class="chip'+classe+'"><span>'+titulo+'</span><span class="metric-icon">'+icon(simbolo)+'</span><strong>'+valor+'</strong><span class="metric-note">'+nota+'</span></div>'
+    ).join('');
+    el('total-resultados').textContent = branches.length;
+    el('tabela-contagem').textContent = branches.length + (branches.length === 1 ? ' tarefa encontrada' : ' tarefas encontradas');
+    el('ultima-atualizacao').textContent = estado.dados?.geradoEm ? 'Atualizado em ' + formatarData(estado.dados.geradoEm) : 'Dados carregados';
 }
 
 function htmlLinha(branch) {
@@ -629,49 +664,53 @@ function ligarEventos() {
 
     el('cfg-salvar').addEventListener('click', salvarConfig);
 
-    el('filtro-autor').addEventListener('change', evento => {
-        estado.autor = evento.target.value;
-        localStorage.setItem('sky_merge_autor', estado.autor);
+    el('filtro-responsavel').addEventListener('change', evento => {
+        estado.responsavel = evento.target.value;
+        salvarFiltros();
         renderizar();
     });
 
     el('filtro-sistema').addEventListener('change', evento => {
         estado.sistema = evento.target.value;
+        salvarFiltros();
         renderizar();
     });
 
     el('filtro-ano').addEventListener('change', evento => {
         estado.ano = evento.target.value;
-        localStorage.setItem('sky_merge_ano', estado.ano);
+        salvarFiltros();
         carregar();
     });
 
     el('filtro-situacao').addEventListener('change', evento => {
         estado.situacao = evento.target.value;
+        salvarFiltros();
         renderizar();
     });
 
     el('filtro-versao').addEventListener('change', evento => {
         estado.versao = evento.target.value;
+        salvarFiltros();
         renderizar();
     });
 
     el('filtro-prontas').addEventListener('change', evento => {
         estado.somenteProntas = evento.target.checked;
+        salvarFiltros();
         renderizar();
     });
 
     let temporizadorBusca = null;
     el('filtro-busca').addEventListener('input', evento => {
+        estado.busca = evento.target.value;
+        salvarFiltros();
         clearTimeout(temporizadorBusca);
-        temporizadorBusca = setTimeout(() => {
-            estado.busca = evento.target.value;
-            renderizar();
-        }, 200);
+        temporizadorBusca = setTimeout(renderizar, 200);
     });
 
     el('filtro-mescladas').addEventListener('change', evento => {
         estado.mostrarMescladas = evento.target.checked;
+        salvarFiltros();
         renderizar();
     });
 
@@ -709,5 +748,6 @@ function ligarEventos() {
 }
 
 preencherAnos();
+restaurarFiltrosEstaticos();
 ligarEventos();
 verificarConfig();

@@ -599,13 +599,16 @@ async function coletarPendentes({ anos, projetos }) {
     }
 
     const redmine = await enriquecerComRedmine(branches.lista);
-    const autores = [...new Set(branches.lista.flatMap(branch => branch.revisoes.map(revisao => revisao.autor)).filter(Boolean))].sort();
+    const responsaveis = [...new Set(branches.lista
+        .map(branch => redmine.tarefas[branch.taskId]?.responsavel)
+        .filter(Boolean))]
+        .sort((a, b) => a.localeCompare(b, 'pt-BR'));
 
     return {
         geradoEm: new Date().toISOString(),
         anos,
         projetos,
-        autores,
+        responsaveis,
         branches: branches.lista.map(branch => ({
             ...branch,
             tarefa: redmine.tarefas[branch.taskId] || null
@@ -633,6 +636,7 @@ module.exports = {
     verificarConteudo,
     diasDesde,
     caminhoRelativo,
+    executarLimitado,
     mapearTarefa,
     coletarPendentes,
     limparCache,

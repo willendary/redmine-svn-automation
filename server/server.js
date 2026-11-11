@@ -6,6 +6,11 @@ const { exec, spawn } = require('child_process');
 const util = require('util');
 const { REPO_BASE, PROJECTS } = require('./projetos');
 const mergePendentes = require('./merge_pendentes');
+const branches = require('./branches');
+const fluxo = require('./fluxo');
+const timer = require('./timer');
+const redmine = require('./redmine');
+const preferencias = require('./preferencias');
 const app = express();
 
 app.use(cors());
@@ -31,7 +36,7 @@ function addLog(type, msg) {
     }
 }
 
-app.get('/logs', (req, res) => {
+app.get('/logs/dados', (req, res) => {
     res.json({ logs: appLogs });
 });
 
@@ -48,8 +53,12 @@ mergePendentes.definirLogger(addLog);
 // Arquivos estáticos (tela de pendentes de merge)
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.get('/', (req, res) => res.redirect('/pendentes'));
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'pendentes.html')));
 app.get('/pendentes', (req, res) => res.sendFile(path.join(__dirname, 'public', 'pendentes.html')));
+app.get('/minhas-tarefas', (req, res) => res.sendFile(path.join(__dirname, 'public', 'minhas-tarefas.html')));
+app.get('/tarefa/:id', (req, res) => res.sendFile(path.join(__dirname, 'public', 'tarefa.html')));
+app.get('/config', (req, res) => res.sendFile(path.join(__dirname, 'public', 'config.html')));
+app.get('/logs', (req, res) => res.sendFile(path.join(__dirname, 'public', 'logs.html')));
 
 // Configuração do Redmine usada pela tela de pendentes
 app.get('/config-redmine', (req, res) => {
@@ -65,6 +74,250 @@ app.post('/config-redmine', async (req, res) => {
     } catch (erro) {
         addLog('WARN', `[CONFIG] Falha ao salvar configuração do Redmine: ${erro.message}`);
         res.status(400).json({ error: erro.message });
+    }
+});
+
+app.get('/preferencias', (req, res) => {
+    res.json({ secoes: preferencias.listarSecoes() });
+});
+
+app.put('/preferencias', (req, res) => {
+    try {
+        preferencias.salvar(req.body || {});
+        addLog('INFO', '[CONFIG] Preferências atualizadas.');
+        res.json({ success: true, secoes: preferencias.listarSecoes() });
+    } catch (erro) {
+        res.status(400).json({ error: erro.message });
+    }
+});
+
+function dataIsoValida(data) {
+    if (typeof data !== 'string') return false;
+    const partes = /^(\d{4})-(\d{2})-(\d{2})$/.exec(data);
+    if (!partes) return false;
+    return new Date(Date.UTC(Number(partes[1]), Number(partes[2]) - 1, Number(partes[3])))
+        .toISOString().startsWith(data);
+}
+
+function obterHorasValidas(valor) {
+    const horas = Number(valor);
+    if (!Number.isFinite(horas) || horas <= 0) throw new Error('Informe uma quantidade de horas maior que zero.');
+    const arredondadas = Math.round(horas * 100) / 100;
+    if (arredondadas <= 0) throw new Error('Informe pelo menos 0,01 hora.');
+    return arredondadas;
+}
+
+app.get('/time-entries', async (req, res) => {
+    const data = String(req.query.date || '');
+    if (!dataIsoValida(data)) return res.status(400).json({ error: 'Informe uma data válida no formato AAAA-MM-DD.' });
+
+    try {
+        const [lancamentos, atividades] = await Promise.all([
+            redmine.obterLancamentosPorDia(data),
+            redmine.obterAtividadesTempo()
+        ]);
+        res.json({ success: true, lancamentos, atividades });
+    } catch (erro) {
+        addLog('ERROR', `[HORAS] Falha ao consultar lançamentos de ${data}: ${erro.message}`);
+        res.status(500).json({ error: erro.message });
+    }
+});
+
+app.post('/time-entries', async (req, res) => {
+    const { taskId, date, atividadeId } = req.body || {};
+    const idTarefa = Number(taskId);
+    const idAtividade = Number(atividadeId);
+
+    if (!Number.isInteger(idTarefa) || idTarefa <= 0) {
+        return res.status(400).json({ error: 'Informe um número de tarefa válido.' });
+    }
+    if (!dataIsoValida(date)) {
+        return res.status(400).json({ error: 'Informe uma data válida no formato AAAA-MM-DD.' });
+    }
+
+    let horas;
+    try {
+        horas = obterHorasValidas(req.body.horas);
+    } catch (erro) {
+        return res.status(400).json({ error: erro.message });
+    }
+
+    try {
+        const atividades = await redmine.obterAtividadesTempo();
+        if (!atividades.some(atividade => atividade.id === idAtividade)) {
+            return res.status(400).json({ error: 'Selecione uma atividade válida.' });
+        }
+
+        const resultado = await redmine.registrarTempo({
+            taskId: idTarefa,
+            horas,
+            comentario: String(req.body.comentario || ''),
+            atividade: idAtividade,
+            data
+        });
+        addLog('INFO', `[HORAS] ${horas}h lançadas em T#${idTarefa} para ${date}`);
+        res.status(201).json({ success: true, lancamento: resultado?.time_entry || null });
+    } catch (erro) {
+        addLog('ERROR', `[HORAS] Falha ao lançar em T#${idTarefa}: ${erro.message}`);
+        res.status(500).json({ error: erro.message });
+    }
+});
+
+app.put('/time-entries/:id', async (req, res) => {
+    const id = Number(req.params.id);
+    const { atividadeId, date, dataOriginal } = req.body || {};
+    const idAtividade = Number(atividadeId);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Lançamento inválido.' });
+    if (!dataIsoValida(date)) return res.status(400).json({ error: 'Informe uma data válida no formato AAAA-MM-DD.' });
+    if (!dataIsoValida(dataOriginal)) return res.status(400).json({ error: 'A data original do lançamento é inválida.' });
+
+    let horas;
+    try {
+        horas = obterHorasValidas(req.body?.horas);
+    } catch (erro) {
+        return res.status(400).json({ error: erro.message });
+    }
+
+    try {
+        const [lancamento, usuario, atividades] = await Promise.all([
+            redmine.obterLancamentoTempo(id),
+            redmine.obterUsuarioAtual(),
+            redmine.obterAtividadesTempo()
+        ]);
+        if (Number(lancamento.user?.id) !== Number(usuario.id)) {
+            return res.status(403).json({ error: 'Só é possível alterar lançamentos criados por você.' });
+        }
+        if (lancamento.spent_on !== dataOriginal) {
+            return res.status(409).json({ error: 'Este lançamento foi alterado desde que a lista foi carregada. Atualize e tente novamente.' });
+        }
+        if (!atividades.some(atividade => atividade.id === idAtividade)) {
+            return res.status(400).json({ error: 'Selecione uma atividade válida.' });
+        }
+
+        await redmine.atualizarLancamentoTempo(id, {
+            horas,
+            comentario: String(req.body.comentario || ''),
+            atividadeId: idAtividade,
+            data: date
+        });
+        addLog('INFO', `[HORAS] Lançamento ${id} alterado para ${horas}h em ${date}`);
+        res.json({ success: true });
+    } catch (erro) {
+        addLog('ERROR', `[HORAS] Falha ao alterar lançamento ${id}: ${erro.message}`);
+        res.status(500).json({ error: erro.message });
+    }
+});
+
+// Dados da tarefa para a tela /tarefa/:id
+app.get('/tarefa/:id/dados', async (req, res) => {
+    const id = String(req.params.id).replace(/\D/g, '');
+    const config = mergePendentes.lerConfigRedmine();
+
+    if (!config.apiKey) {
+        return res.status(400).json({ error: 'API key do Redmine não configurada. Abra /config.' });
+    }
+
+    try {
+        const issue = await redmine.obterIssue(id);
+        const [horasHoje, tarefasDoFluxo, branch, estadoTimer] = await Promise.all([
+            redmine.obterHorasHoje(id).catch(() => 0),
+            fluxo.obterFluxo(id).catch(() => []),
+            fluxo.obterBranchDoFluxo(id, issue.fixed_version?.name || '')
+                .catch(erro => ({ encontrada: false, url: null, viaTaskId: null, erro: erro.message })),
+            timer.estado().catch(() => ({ rodando: false }))
+        ]);
+
+        const tarefa = {
+            ...mergePendentes.mapearTarefa(issue, config.url),
+            horasHoje,
+            horasEstimadas: Number(issue.estimated_hours) || 0,
+            horasGastas: Number(issue.spent_hours) || 0
+        };
+
+        res.json({
+            success: true,
+            tarefa,
+            fluxo: tarefasDoFluxo.map(item => mergePendentes.mapearTarefa(item, config.url)),
+            branch,
+            timer: estadoTimer
+        });
+    } catch (erro) {
+        addLog('ERROR', `[TAREFA] Falha ao carregar T#${id}: ${erro.message}`);
+        res.status(500).json({ error: erro.message });
+    }
+});
+
+// Lista de tarefas atribuidas ao usuario, com horas de hoje e alerta de dias < 7h
+app.get('/minhas-tarefas/dados', async (req, res) => {
+    const config = mergePendentes.lerConfigRedmine();
+
+    if (!config.apiKey) {
+        return res.status(400).json({ error: 'API key do Redmine não configurada. Abra /config.' });
+    }
+
+    try {
+        const [issues, entradasHoje, dias, estadoTimer] = await Promise.all([
+            redmine.listarMinhasTarefas(),
+            redmine.obterEntradasHoje(),
+            redmine.obterHorasPorDia(10),
+            timer.estado().catch(() => ({ rodando: false }))
+        ]);
+
+        const porTarefa = redmine.agruparHorasPorTarefa(entradasHoje);
+        const tarefas = issues.map(issue => ({
+            ...mergePendentes.mapearTarefa(issue, config.url),
+            horasHoje: porTarefa.get(String(issue.id)) || 0
+        }));
+
+        res.json({
+            success: true,
+            tarefas,
+            totalHoje: redmine.somarHoras(entradasHoje),
+            dias,
+            timer: estadoTimer
+        });
+    } catch (erro) {
+        addLog('ERROR', `[TAREFAS] Falha ao listar minhas tarefas: ${erro.message}`);
+        res.status(500).json({ error: erro.message });
+    }
+});
+
+// --- Cronometro ---
+
+app.get('/timer', async (req, res) => {
+    try {
+        res.json({ success: true, ...(await timer.estado()) });
+    } catch (erro) {
+        res.status(500).json({ error: erro.message });
+    }
+});
+
+app.post('/timer/iniciar', async (req, res) => {
+    const { taskId, confirmarTroca } = req.body || {};
+
+    try {
+        const estado = await timer.iniciar(taskId, { confirmarTroca: Boolean(confirmarTroca) });
+        addLog('INFO', `[TIMER] Iniciado em T#${estado.taskId}`);
+        res.json({ success: true, ...estado });
+    } catch (erro) {
+        if (erro.status === 409) {
+            return res.status(409).json({ error: erro.message, anterior: erro.anterior });
+        }
+        addLog('ERROR', `[TIMER] Falha ao iniciar: ${erro.message}`);
+        res.status(500).json({ error: erro.message });
+    }
+});
+
+app.post('/timer/parar', async (req, res) => {
+    const { horas, comentario, resolver } = req.body || {};
+
+    try {
+        const resultado = await timer.parar({ horas, comentario, resolver: Boolean(resolver) });
+        addLog('INFO', `[TIMER] T#${resultado.taskId}: ${resultado.horas}h lançadas${resultado.resolvida ? ' (resolvida)' : ''}`);
+        res.json({ success: true, ...resultado });
+    } catch (erro) {
+        addLog('ERROR', `[TIMER] Falha ao parar: ${erro.message}`);
+        res.status(500).json({ error: erro.message });
     }
 });
 
@@ -235,6 +488,7 @@ app.post('/create-branch', (req, res) => {
     checkSvnPath(branchUrl).then(exists => {
         if (exists) {
             addLog('INFO',`[AVISO] Branch já existe: ${branchUrl}`);
+            branches.limparCache();
             return res.json({ success: true, url: branchUrl, message: "Branch já existia." });
         }
 
@@ -242,6 +496,7 @@ app.post('/create-branch', (req, res) => {
 
         runSvnCallback(command, res, (stdout) => {
             addLog('INFO',`[SUCESSO] Branch criada: ${branchUrl}`);
+            branches.limparCache();
             res.json({ success: true, url: branchUrl, output: stdout });
         });
     });
@@ -260,57 +515,26 @@ async function checkSvnPath(url) {
 // Rota para buscar branch existente
 app.get('/task-branch', async (req, res) => {
     const { taskId, version } = req.query;
-    
+
     if (!taskId || !version) {
         return res.status(400).json({ found: false, error: "taskId e version são obrigatórios" });
     }
 
-    addLog('INFO',`[BUSCA] Procurando branch para T${taskId} na versão ${version}...`);
+    addLog('INFO', `[BUSCA] Procurando branch para T${taskId} na versão ${version}...`);
 
-    const now = new Date();
-    // Tenta nos últimos 24 meses (2 anos)
-    const MAX_MONTHS_BACK = 24;
-    
-    // Gera lista de datas para verificar (do atual para o passado)
-    const datesToCheck = [];
-    for (let i = 0; i < MAX_MONTHS_BACK; i++) {
-        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        datesToCheck.push({
-            year: d.getFullYear(),
-            month: String(d.getMonth() + 1).padStart(2, '0')
-        });
-    }
-
-    // Busca em paralelo para ser rápido
-    let foundUrl = null;
-    const promises = datesToCheck.map(async (date) => {
-        if (foundUrl) return; // Se já achou, aborta os próximos (otimização leve)
-
-    for (const projectInfo of Object.values(PROJECTS)) {
-
-        const branchProject = projectInfo.branch;
-
-        const candidateUrl =
-            `${REPO_BASE}/branches/${branchProject}/${date.year}/${date.month}/${version}/T${taskId}`;
-
-        const exists = await checkSvnPath(candidateUrl);
-
-        if (exists && !foundUrl) {
-            foundUrl = candidateUrl;
-            return;
+    try {
+        const url = await branches.localizarBranch(taskId, version);
+        if (url) {
+            addLog('INFO', `[ENCONTRADO] ${url}`);
+            return res.json({ found: true, url });
         }
+
+        addLog('INFO', `[NAO ENCONTRADO] Branch para T${taskId} não encontrada.`);
+        return res.json({ found: false });
+    } catch (erro) {
+        addLog('ERROR', `[BUSCA] Falha ao procurar branch de T${taskId}: ${erro.message}`);
+        return res.status(500).json({ found: false, error: erro.message });
     }
-    });
-
-    await Promise.all(promises);
-
-    if (foundUrl) {
-        addLog('INFO',`[ENCONTRADO] ${foundUrl}`);
-        return res.json({ found: true, url: foundUrl });
-    }
-
-    addLog('INFO',`[NAO ENCONTRADO] Branch para T${taskId} não encontrada.`);
-    return res.json({ found: false });
 });
 
 // Rota para buscar histórico de commits (Log)

@@ -16,3 +16,9 @@ build/
 
 # Configuração local (contém API key do Redmine)
 server/config.json
+
+# Estado do cronômetro (local, não versionar)
+server/timer.json
+
+# Preferências locais da interface
+server/preferencias.json

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Minhas tarefas · Sky Redmine</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20261111-3">
+<meta name="theme-color" content="#4263eb">
+<link rel="stylesheet" href="/tailwind.css?v=20261111-3">
+<link rel="stylesheet" href="/interface.css?v=20261111-3">
+<script src="/interface.js?v=20261111-3"></script>
+</head>
+<body class="page-minhas-tarefas">
+<div class="pagina">
+<nav class="nav" id="nav" aria-label="Navegação principal"></nav>
+<div class="topo">
+  <div><h1>Minhas tarefas</h1><p class="subtitulo">Organize suas entregas e acompanhe o tempo dedicado a cada tarefa.</p></div>
+  <div class="acoes-topo"><button class="btn" id="atualizar" data-icon="refresh">Atualizar tarefas</button></div>
+</div>
+<div id="resumo" class="resumo"></div>
+<div id="aviso"></div>
+<section class="card daily-overview" aria-label="Meta diária">
+  <div class="daily-overview-copy"><span class="daily-icon" data-icon-only="clock"></span><div><h2>Seu ritmo, hoje</h2><p id="meta-restante">Carregando horas do dia...</p></div></div>
+  <div class="daily-overview-progress"><div class="daily-target"><strong id="meta-horas">—</strong><span>Meta diária: 7h</span></div><progress id="meta-progresso" value="0" max="7" aria-label="Progresso da meta diária"></progress></div>
+</section>
+<section class="card tasks-panel" aria-label="Lista de tarefas">
+  <div class="table-toolbar"><div><h2>Suas tarefas <span class="section-count" id="total-tarefas">—</span></h2><p class="section-description">Todas as suas entregas, organizadas por sprint.</p></div><div class="search-field"><span data-icon-only="search"></span><input type="search" id="filtro" aria-label="Filtrar por título, ID ou sprint" placeholder="Buscar tarefa, ID ou sprint..."><kbd class="search-shortcut">/</kbd></div></div>
+  <div class="tabela-wrapper task-table"><table><colgroup><col class="col-task"><col class="col-sprint"><col class="col-hours"><col class="col-timer"><col class="col-actions"></colgroup><thead><tr><th>Tarefa</th><th>Sprint</th><th class="num">Horas hoje</th><th>Cronômetro</th><th>Ações</th></tr></thead><tbody id="corpo"><tr><td colspan="5" class="carregando">Carregando suas tarefas...</td></tr></tbody></table></div>
+</section>
+<section class="card history-panel" aria-labelledby="titulo-historico">
+  <div class="table-toolbar"><div><span class="eyebrow">REGISTRO DE TEMPO</span><h2 id="titulo-historico">Histórico de horas</h2><p class="section-description">Expanda um dia para consultar, adicionar ou editar seus lançamentos.</p></div><span class="history-meta" data-icon="clock">Últimos dias · Meta de 7h/dia</span></div>
+  <div class="tabela-wrapper history-table"><table><thead><tr><th>Dia / lançamentos</th><th class="num">Total de horas</th></tr></thead><tbody id="dias"><tr><td colspan="2" class="carregando">Carregando histórico...</td></tr></tbody></table></div>
+</section>
+</div>
+<script src="/comum.js?v=20261111-3"></script>
+<script src="/minhas-tarefas.js?v=20261111-3"></script>
+</body>
+</html>

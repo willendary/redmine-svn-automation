@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tarefa - Sky Redmine</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20261111-3">
+<meta name="theme-color" content="#4263eb">
+<link rel="stylesheet" href="/tailwind.css?v=20261111-3">
+<link rel="stylesheet" href="/interface.css?v=20261111-3">
+<script src="/interface.js?v=20261111-3"></script>
+</head>
+<body class="page-task">
+<div class="pagina">
+    <nav class="nav" id="nav" aria-label="Navegação principal"></nav>
+
+    <div class="topo">
+        <div>
+            <h1 id="titulo">Carregando tarefa...</h1>
+            <p class="subtitulo" id="subtitulo"></p>
+        </div>
+        <div class="acoes-topo">
+            <button class="btn secundario" id="copiar-titulo" data-icon="copy">Copiar título</button>
+            <a class="btn secundario" id="link-redmine" data-icon="external" target="_blank" rel="noopener">Abrir no Redmine</a>
+            <button class="btn secundario" id="atualizar" data-icon="refresh">Atualizar</button>
+        </div>
+    </div>
+
+    <div id="resumo" class="resumo"></div>
+    <div id="aviso"></div>
+
+    <div class="detail-grid"><div class="card" id="card-branch">
+        <span class="eyebrow">Controle de versões</span><h2>Branch da tarefa</h2>
+        <div id="branch-conteudo" class="meta">Procurando branch...</div>
+    </div>
+
+    <div class="card" id="card-timer">
+        <span class="eyebrow">Tempo de foco</span><h2>Cronômetro</h2>
+        <div class="linha-timer">
+            <button class="botao-play" id="botao-timer" title="Iniciar trabalho">&#9658;</button>
+            <span class="cronometro" id="cronometro">00:00:00</span>
+            <span class="meta" id="timer-info"></span>
+        </div>
+    </div>
+
+    </div><div class="card">
+        <div class="section-heading"><div><h2>Fluxo da tarefa</h2><p>Acompanhe as tarefas relacionadas à sua entrega.</p></div></div>
+        <div class="tabela-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Tarefa</th>
+                        <th>Sprint</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="fluxo"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script src="/comum.js?v=20261111-3"></script>
+<script src="/tarefa.js?v=20261111-3"></script>
+</body>
+</html>

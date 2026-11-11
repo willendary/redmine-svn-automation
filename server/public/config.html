@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Configurações - Sky Redmine</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20261111-3">
+<meta name="theme-color" content="#4263eb">
+<link rel="stylesheet" href="/tailwind.css?v=20261111-3">
+<link rel="stylesheet" href="/interface.css?v=20261111-3">
+<script src="/interface.js?v=20261111-3"></script>
+</head>
+<body class="page-config">
+<div class="pagina config-shell">
+    <nav class="nav" id="nav" aria-label="Navegação principal"></nav>
+
+    <header class="config-hero">
+        <div>
+            <span class="config-kicker">DO SEU JEITO</span>
+            <h1>Configurações</h1>
+            <p>Um espaço de trabalho que funciona para você. Ajuste suas preferências e integrações.</p>
+        </div>
+        <div class="config-hero-icon" aria-hidden="true">
+            <svg viewBox="0 0 48 48" fill="none">
+                <path d="M8 14h32M8 24h32M8 34h32" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+                <circle cx="18" cy="14" r="5" fill="var(--branco)" stroke="currentColor" stroke-width="3"/>
+                <circle cx="31" cy="24" r="5" fill="var(--branco)" stroke="currentColor" stroke-width="3"/>
+                <circle cx="21" cy="34" r="5" fill="var(--branco)" stroke="currentColor" stroke-width="3"/>
+            </svg>
+        </div>
+    </header>
+
+    <main class="config-layout">
+        <section class="card config-card" aria-labelledby="titulo-preferencias">
+            <div class="config-card-header">
+                <div class="config-section-icon" aria-hidden="true"><span data-icon-only="settings"></span></div>
+                <div>
+                    <h2 id="titulo-preferencias">Preferências</h2>
+                    <p>Opções de exibição salvas neste computador.</p>
+                </div>
+            </div>
+
+            <div id="secoes-preferencias" class="config-secoes">
+                <div class="config-carregando">Carregando preferências...</div>
+            </div>
+
+            <div class="config-footer">
+                <div id="status-preferencias" class="config-save-status" role="status" aria-live="polite">
+                    Carregando preferências...
+                </div>
+                <button class="btn" id="salvar-preferencias" type="button" disabled>Salvar preferências</button>
+            </div>
+        </section>
+
+        <section class="card config-card" aria-labelledby="titulo-redmine">
+            <div class="config-card-header">
+                <div class="config-section-icon redmine" aria-hidden="true"><span data-icon-only="shield"></span></div>
+                <div>
+                    <h2 id="titulo-redmine">Conexão com Redmine</h2>
+                    <p>Credencial usada para consultar tarefas e registrar horas.</p>
+                </div>
+            </div>
+
+            <div id="formulario"><div class="connection-note"><span data-icon-only="shield"></span><span>Conecte sua conta para consultar tarefas e registrar horas. Encontre a API key em <strong>Minha conta</strong> no Redmine.</span></div>
+                <div class="campo">
+                    <label for="url">URL do Redmine</label>
+                    <input type="text" id="url" aria-label="URL do Redmine" placeholder="https://redmine.skyinformatica.com.br">
+                </div>
+                <div class="campo">
+                    <label for="apiKey">API key</label>
+                    <input type="password" id="apiKey" aria-label="API key" placeholder="Informe apenas para trocar a chave">
+                    <small>Sua chave é armazenada apenas neste computador.</small>
+                </div>
+                <div class="config-footer config-footer-redmine">
+                    <div id="status" class="config-save-status" role="status" aria-live="polite"></div>
+                    <button class="btn" id="salvar" type="button">Salvar e validar</button>
+                </div>
+            </div>
+        </section>
+    </main>
+</div>
+
+<script src="/comum.js?v=20261111-3"></script>
+<script src="/config.js?v=20261111-3"></script>
+</body>
+</html>

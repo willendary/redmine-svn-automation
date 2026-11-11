@@ -1,10 +1,12 @@
 {
   "name": "svn-automation",
   "version": "1.0.0",
-  "description": "",
+  "description": "Workspace web para tarefas Redmine, branches SVN e registro de horas.",
   "main": "server.js",
   "scripts": {
-    "test": "node --test \"*.test.js\""
+    "test": "node --test \"*.test.js\"",
+    "build:css": "tailwindcss -i tailwind.css -o public/tailwind.css --minify",
+    "start": "node server.js"
   },
   "keywords": [],
   "author": "",
@@ -14,5 +16,9 @@
     "cors": "^2.8.5",
     "express": "^5.2.1",
     "fast-xml-parser": "^5.8.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.3.5",
+    "jsdom": "^29.1.1"
   }
 }

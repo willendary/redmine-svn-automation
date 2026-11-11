@@ -64,6 +64,7 @@ test('mapearTarefa extrai versão de teste e versão estável dos campos do Redm
         id: 97113,
         subject: 'Fechamento de caixa',
         status: { name: 'Fechada', is_closed: true },
+        assigned_to: { name: 'Willian Antônio Oliveira' },
         fixed_version: { name: '2026-22 (26/10 a 06/11)' },
         custom_fields: [
             { id: 35, name: 'Versão teste', value: '2026.10.30.0' },
@@ -75,6 +76,7 @@ test('mapearTarefa extrai versão de teste e versão estável dos campos do Redm
     assert.strictEqual(tarefa.versaoEstavel, '');
     assert.strictEqual(tarefa.fechada, true);
     assert.strictEqual(tarefa.sprint, '2026-22 (26/10 a 06/11)');
+    assert.strictEqual(tarefa.responsavel, 'Willian Antônio Oliveira');
 });
 
 test('mapearTarefa aceita tarefa sem campos personalizados', () => {
