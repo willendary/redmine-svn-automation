@@ -1,6 +1,5 @@
 let tarefas = [];
 let dias = [];
-let timer = { rodando: false };
 let totalHoje = 0;
 let exibirFimDeSemana = true;
 let filtro = '';
@@ -10,11 +9,6 @@ let atividadesLancamento = [];
 let carregandoLancamentos = false;
 let erroLancamentos = '';
 
-function segundosDecorridos() {
-    if (!timer.rodando || !timer.inicio) return 0;
-    return Math.max(0, (Date.now() - new Date(timer.inicio).getTime()) / 1000);
-}
-
 function htmlBadges(tarefa) {
     const status = `<span class="badge${tarefa.fechada ? ' fechada' : ''}">${escapar(tarefa.status || 'sem status')}</span>`;
     const versaoTeste = tarefa.versaoTeste ? `<span class="badge versao">teste ${escapar(tarefa.versaoTeste)}</span>` : '';
@@ -23,24 +17,17 @@ function htmlBadges(tarefa) {
 }
 
 function htmlLinha(tarefa) {
-    const rodando = timer.rodando && String(timer.taskId) === String(tarefa.id);
     const link = `<a class="task-link" href="/tarefa/${tarefa.id}"><span class="task-number">#${tarefa.id}</span><span class="task-subject">${escapar(tarefa.assunto)}</span></a>`;
 
     return `
-        <tr data-tarefa="${tarefa.id}" class="${rodando ? 'task-running' : ''}">
+        <tr data-tarefa="${tarefa.id}">
             <td>
                 ${link}
                 <div class="meta">${htmlBadges(tarefa)} ${escapar(tarefa.projeto || '')}</div>
             </td>
             <td class="sprint-cell">${escapar(tarefa.sprint || '-')}</td>
             <td class="num">${formatarHoras(tarefa.horasHoje)}</td>
-            <td>
-                ${rodando ? `<span class="cronometro" data-cronometro="${tarefa.id}" style="font-size:16px;">${formatarDuracao(segundosDecorridos())}</span>` : '<span class="meta">-</span>'}
-            </td>
             <td><div class="row-actions">
-                <button class="botao-play${rodando ? ' parar' : ''}" data-acao="${rodando ? 'parar' : 'iniciar'}" data-tarefa="${tarefa.id}" title="${rodando ? 'Parar e lançar horas' : 'Iniciar trabalho'}" aria-label="${rodando ? 'Parar e lançar horas' : 'Iniciar trabalho'} em T#${tarefa.id}">
-                    ${rodando ? '&#9632;' : '&#9658;'}
-                </button>
                 <button class="btn secundario pequeno" data-acao="copiar" data-tarefa="${tarefa.id}" aria-label="Copiar título da tarefa ${tarefa.id}" title="Copiar título">${window.SkyUI.icon('copy')}</button>
             </div></td>
         </tr>
@@ -54,7 +41,7 @@ function htmlGrupos(lista) {
     for (const tarefa of lista) {
         if (tarefa.sprint !== sprintAtual) {
             sprintAtual = tarefa.sprint;
-            partes.push(`<tr class="linha-grupo"><td colspan="5">${escapar(sprintAtual || 'Sem sprint')}</td></tr>`);
+            partes.push(`<tr class="linha-grupo"><td colspan="4">${escapar(sprintAtual || 'Sem sprint')}</td></tr>`);
         }
         partes.push(htmlLinha(tarefa));
     }
@@ -133,14 +120,14 @@ function renderizar() {
 
     document.getElementById('corpo').innerHTML = visiveis.length > 0
         ? htmlGrupos(visiveis)
-        : '<tr><td colspan="5" class="estado-vazio"><strong>Nenhuma tarefa por aqui</strong><p>Altere sua busca ou atualize a lista de tarefas.</p></td></tr>';
+        : '<tr><td colspan="4" class="estado-vazio"><strong>Nenhuma tarefa por aqui</strong><p>Altere sua busca ou atualize a lista de tarefas.</p></td></tr>';
 
     const restante = Math.max(0, 7 - totalHoje);
     const metricas = [
         ['Horas registradas hoje', formatarHoras(totalHoje), 'tempo dedicado às suas entregas', 'clock'],
         ['Tarefas abertas', tarefas.length, 'atribuídas a você no Redmine', 'tasks'],
         ['Tempo para a meta', formatarHoras(restante), restante > 0 ? 'para completar as 7h do dia' : 'meta diária alcançada', 'check'],
-        ['Em andamento', timer.rodando ? 'T#'+timer.taskId : 'Sem timer', timer.rodando ? 'cronômetro ativo' : 'inicie uma tarefa para focar', 'branch']
+        ['Dias com horas', dias.filter(dia => Number(dia.horas) > 0).length, 'nos últimos 10 dias', 'grid']
     ];
     document.getElementById('resumo').innerHTML = metricas.map(([titulo,valor,nota,simbolo],index) =>
         '<div class="chip'+(index === 0 ? ' destaque' : '')+'"><span>'+titulo+'</span><span class="metric-icon">'+window.SkyUI.icon(simbolo)+'</span><strong>'+escapar(valor)+'</strong><span class="metric-note">'+nota+'</span></div>'
@@ -294,16 +281,6 @@ function abrirModalLancamento(dia, lancamento = null) {
     });
 }
 
-function tick() {
-    if (!timer.rodando) return;
-    const alvo = document.querySelector(`[data-cronometro="${timer.taskId}"]`);
-    if (!alvo) return;
-
-    const tarefa = tarefas.find(item => String(item.id) === String(timer.taskId));
-    const horasHoje = tarefa ? tarefa.horasHoje : (timer.horasHoje || 0);
-    alvo.textContent = formatarDuracao(horasHoje * 3600 + segundosDecorridos());
-}
-
 async function carregar() {
     const [dados, configuracao] = await Promise.all([
         pedirJson('/minhas-tarefas/dados'),
@@ -311,7 +288,6 @@ async function carregar() {
     ]);
     tarefas = dados.tarefas || [];
     dias = dados.dias || [];
-    timer = dados.timer || { rodando: false };
     totalHoje = Number(dados.totalHoje) || 0;
     const configuracaoExibicao = configuracao?.secoes
         ?.flatMap(secao => secao.configuracoes || [])
@@ -319,40 +295,6 @@ async function carregar() {
     exibirFimDeSemana = configuracaoExibicao ? Boolean(configuracaoExibicao.valor) : true;
     document.getElementById('aviso').innerHTML = '';
     renderizar();
-}
-
-async function iniciar(taskId) {
-    try {
-        const estado = await pedirJson('/timer/iniciar', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ taskId })
-        });
-        timer = estado;
-        await carregar();
-        mostrarToast(`Cronômetro iniciado em T#${taskId}.`);
-    } catch (erro) {
-        if (erro.status === 409 && erro.dados.anterior) {
-            const anterior = erro.dados.anterior;
-            const horas = formatarDuracao(anterior.decorridoHoras * 3600);
-            const confirmado = window.confirm(
-                `T#${anterior.taskId} está em andamento há ${horas}.\n\n` +
-                'Iniciar esta tarefa e descartar o tempo da anterior?'
-            );
-            if (!confirmado) return;
-
-            const estado = await pedirJson('/timer/iniciar', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ taskId, confirmarTroca: true })
-            });
-            timer = estado;
-            await carregar();
-            mostrarToast(`Cronômetro iniciado em T#${taskId}.`);
-            return;
-        }
-        mostrarToast(erro.message, 'erro');
-    }
 }
 
 function copiar(tarefa) {
@@ -375,14 +317,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const tarefa = tarefas.find(item => String(item.id) === botao.dataset.tarefa);
         if (!tarefa) return;
 
-        if (botao.dataset.acao === 'iniciar') iniciar(tarefa.id);
-        else if (botao.dataset.acao === 'parar') {
-            abrirModalRegistroTempo(timer, () => {
-                timer = { rodando: false };
-                carregar().catch(erro => mostrarToast(erro.message, 'erro'));
-            });
-        }
-        else if (botao.dataset.acao === 'copiar') copiar(tarefa);
+        if (botao.dataset.acao === 'copiar') copiar(tarefa);
     });
 
     document.getElementById('dias').addEventListener('click', evento => {
@@ -403,10 +338,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     carregar().catch(erro => {
         document.getElementById('aviso').innerHTML = `<div class="aviso erro">${escapar(erro.message)}</div>`;
-        document.getElementById('corpo').innerHTML = '<tr><td colspan="5" class="estado-vazio"><strong>Não foi possível carregar suas tarefas</strong><p>Verifique a conexão e use Atualizar tarefas para tentar novamente.</p></td></tr>';
+        document.getElementById('corpo').innerHTML = '<tr><td colspan="4" class="estado-vazio"><strong>Não foi possível carregar suas tarefas</strong><p>Verifique a conexão e use Atualizar tarefas para tentar novamente.</p></td></tr>';
         document.getElementById('dias').innerHTML = '<tr><td colspan="2" class="estado-vazio">Histórico indisponível nesta consulta.</td></tr>';
         document.getElementById('meta-restante').textContent = 'Horas indisponíveis nesta consulta.';
     });
-
-    setInterval(tick, 1000);
 });

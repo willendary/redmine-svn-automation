@@ -8,7 +8,6 @@ const { REPO_BASE, PROJECTS } = require('./projetos');
 const mergePendentes = require('./merge_pendentes');
 const branches = require('./branches');
 const fluxo = require('./fluxo');
-const timer = require('./timer');
 const redmine = require('./redmine');
 const preferencias = require('./preferencias');
 const app = express();
@@ -219,12 +218,11 @@ app.get('/tarefa/:id/dados', async (req, res) => {
 
     try {
         const issue = await redmine.obterIssue(id);
-        const [horasHoje, tarefasDoFluxo, branch, estadoTimer] = await Promise.all([
+        const [horasHoje, tarefasDoFluxo, branch] = await Promise.all([
             redmine.obterHorasHoje(id).catch(() => 0),
             fluxo.obterFluxo(id).catch(() => []),
             fluxo.obterBranchDoFluxo(id, issue.fixed_version?.name || '')
-                .catch(erro => ({ encontrada: false, url: null, viaTaskId: null, erro: erro.message })),
-            timer.estado().catch(() => ({ rodando: false }))
+                .catch(erro => ({ encontrada: false, url: null, viaTaskId: null, erro: erro.message }))
         ]);
 
         const tarefa = {
@@ -238,8 +236,7 @@ app.get('/tarefa/:id/dados', async (req, res) => {
             success: true,
             tarefa,
             fluxo: tarefasDoFluxo.map(item => mergePendentes.mapearTarefa(item, config.url)),
-            branch,
-            timer: estadoTimer
+            branch
         });
     } catch (erro) {
         addLog('ERROR', `[TAREFA] Falha ao carregar T#${id}: ${erro.message}`);
@@ -256,11 +253,10 @@ app.get('/minhas-tarefas/dados', async (req, res) => {
     }
 
     try {
-        const [issues, entradasHoje, dias, estadoTimer] = await Promise.all([
+        const [issues, entradasHoje, dias] = await Promise.all([
             redmine.listarMinhasTarefas(),
             redmine.obterEntradasHoje(),
-            redmine.obterHorasPorDia(10),
-            timer.estado().catch(() => ({ rodando: false }))
+            redmine.obterHorasPorDia(10)
         ]);
 
         const porTarefa = redmine.agruparHorasPorTarefa(entradasHoje);
@@ -273,50 +269,10 @@ app.get('/minhas-tarefas/dados', async (req, res) => {
             success: true,
             tarefas,
             totalHoje: redmine.somarHoras(entradasHoje),
-            dias,
-            timer: estadoTimer
+            dias
         });
     } catch (erro) {
         addLog('ERROR', `[TAREFAS] Falha ao listar minhas tarefas: ${erro.message}`);
-        res.status(500).json({ error: erro.message });
-    }
-});
-
-// --- Cronometro ---
-
-app.get('/timer', async (req, res) => {
-    try {
-        res.json({ success: true, ...(await timer.estado()) });
-    } catch (erro) {
-        res.status(500).json({ error: erro.message });
-    }
-});
-
-app.post('/timer/iniciar', async (req, res) => {
-    const { taskId, confirmarTroca } = req.body || {};
-
-    try {
-        const estado = await timer.iniciar(taskId, { confirmarTroca: Boolean(confirmarTroca) });
-        addLog('INFO', `[TIMER] Iniciado em T#${estado.taskId}`);
-        res.json({ success: true, ...estado });
-    } catch (erro) {
-        if (erro.status === 409) {
-            return res.status(409).json({ error: erro.message, anterior: erro.anterior });
-        }
-        addLog('ERROR', `[TIMER] Falha ao iniciar: ${erro.message}`);
-        res.status(500).json({ error: erro.message });
-    }
-});
-
-app.post('/timer/parar', async (req, res) => {
-    const { horas, comentario, resolver } = req.body || {};
-
-    try {
-        const resultado = await timer.parar({ horas, comentario, resolver: Boolean(resolver) });
-        addLog('INFO', `[TIMER] T#${resultado.taskId}: ${resultado.horas}h lançadas${resultado.resolvida ? ' (resolvida)' : ''}`);
-        res.json({ success: true, ...resultado });
-    } catch (erro) {
-        addLog('ERROR', `[TIMER] Falha ao parar: ${erro.message}`);
         res.status(500).json({ error: erro.message });
     }
 });

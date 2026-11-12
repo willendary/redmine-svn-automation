@@ -38,6 +38,7 @@
     branch:'M7 6v12M7 12h6a4 4 0 0 0 4-4V6M4 3h6v3H4zM14 3h6v3h-6zM4 18h6v3H4z',
     check:'M5 12l4 4L19 6', shield:'M12 3l8 4v6c0 4-8 8-8 8s-8-4-8-8V7zM8 12l3 3 5-6',
     copy:'M9 9h11v12H9zM15 9V3H3v12h6', external:'M14 3h7v7M21 3L10 14M10 3H3v18h18v-7',
+    terminal:'M4 17l6-6-6-6M12 19h8',
     trash:'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7'
   };
   const icon = name => '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="'+(paths[name] || paths.grid)+'"/></svg>';

@@ -13,12 +13,11 @@ const branch = { chave:'branch-93555', taskId:93555, sistema:'financeiro', pasta
 const routes = {
   '/config-redmine':{configurado:true,url:'https://redmine.example'},
   '/preferencias':preferences,
-  '/minhas-tarefas/dados':{tarefas:[task],dias:[{dia:'2026-11-11',horas:3.6},{dia:'2026-11-10',horas:7.5}],totalHoje:3.6,timer:{rodando:false}},
-  '/tarefa/93555/dados':{tarefa:task,branch:{encontrada:true,url:'https://svn.example/branches/T93555'},fluxo:[task],timer:{rodando:false}},
+  '/minhas-tarefas/dados':{tarefas:[task],dias:[{dia:'2026-11-11',horas:3.6},{dia:'2026-11-10',horas:7.5}],totalHoje:3.6},
+  '/tarefa/93555/dados':{tarefa:task,branch:{encontrada:true,url:'https://svn.example/branches/T93555'},fluxo:[task]},
   '/merge-pendentes':{branches:[branch],responsaveis:['Dev'],redmine:{configurado:true},geradoEm:'2026-11-11T15:00:00Z'},
   '/time-entries':{lancamentos:[{id:1,taskId:93555,assunto:longSubject,urlTarefa:task.url,atividade:'Desenvolvimento',comentario:'Análise e implementação completas',horas:3.6,data:'2026-11-11',atividadeId:9}],atividades:[{id:9,nome:'Desenvolvimento',padrao:true}]},
-  '/logs/dados':{logs:['[10:00:00] [INFO] SVN consulta concluída','[10:01:00] [ERROR] Redmine indisponível']},
-  '/timer':{rodando:false}
+  '/logs/dados':{logs:['[10:00:00] [INFO] SVN consulta concluída','[10:01:00] [ERROR] Redmine indisponível']}
 };
 const flush = () => new Promise(resolve => setTimeout(resolve,20));
 async function open(t, name, options={}) {

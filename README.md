@@ -13,9 +13,9 @@ npm ci --prefix server
 npm start --prefix server
 ```
 
-Abra [http://localhost:3000](http://localhost:3000). No Windows, também é possível executar `iniciar_web.cmd`. O servidor permanece ativo enquanto o terminal estiver aberto.
+Ou, no Windows, dê dois cliques em `iniciar_web.cmd`: o servidor sobe em segundo plano, **sem janela de console**, e abre [http://localhost:3000](http://localhost:3000) no navegador. A saída vai para `server/servidor.log`. Para encerrar o servidor, execute `parar_servidor.cmd`.
 
-Se a porta 3000 já estiver em uso por este projeto, use a instância existente. O iniciador não encerra outros processos.
+Se a porta 3000 já estiver em uso por este projeto, o iniciador usa a instância existente e não encerra outros processos.
 
 ## Telas
 
@@ -31,7 +31,7 @@ Use o botão **Modo escuro / Modo claro** no topo de qualquer tela. A preferênc
 
 Abra **Configurações** e informe a URL e a API key do Redmine. A API key pode ser obtida na página **Minha conta** do Redmine.
 
-Os arquivos locais `server/config.json`, `server/timer.json` e `server/preferencias.json` não são versionados. A configuração dos projetos SVN fica em `server/projetos.js`.
+Os arquivos locais `server/config.json` e `server/preferencias.json` não são versionados. A configuração dos projetos SVN fica em `server/projetos.js`.
 
 A API é disponibilizada pelo servidor em `127.0.0.1:3000`. Ações de SVN e registro de horas mantêm os fluxos e validações do backend.
 
@@ -47,7 +47,9 @@ server/
   tailwind.css        Estilos base; gera public/tailwind.css
   frontend.test.js    Testes de integração do frontend com API simulada
   *.test.js           Testes da lógica da API
-iniciar_web.cmd       Inicialização local no Windows
+iniciar_web.cmd       Inicia o servidor oculto (via VBS)
+iniciar_web_oculto.vbs Motor do iniciador oculto
+parar_servidor.cmd    Para o servidor (node na porta 3000)
 ```
 
 O frontend usa HTML, CSS e JavaScript, servidos pela própria API. Não precisa de um servidor de desenvolvimento separado.

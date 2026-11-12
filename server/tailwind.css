@@ -209,14 +209,6 @@
     .modal .lista-revisoes label:hover { @apply bg-slate-50; }
     .modal .lista-revisoes .rev { @apply min-w-[58px] font-mono font-bold text-primary; }
 
-    .cronometro { @apply text-4xl font-bold tracking-tight tabular-nums text-ink; }
-    .linha-timer { @apply flex flex-wrap items-center gap-4; }
-    .botao-play { @apply h-11 w-11 cursor-pointer rounded-full border-0 text-lg text-white shadow-[0_4px_12px_-2px_rgba(79,70,229,0.5)] transition-transform duration-150; background: linear-gradient(135deg, #6366f1, #4f46e5); }
-    .botao-play:hover { @apply brightness-105; }
-    .botao-play:active { @apply scale-95; }
-    .botao-play.parar { background: linear-gradient(135deg, #f43f5e, #e11d48); }
-    .botao-play:disabled { @apply cursor-not-allowed; background: #94a3b8; }
-
     /* Config */
     .config-hero {
         @apply mb-5 flex items-center justify-between gap-6 rounded-2xl px-7 py-7 shadow-card;
@@ -362,7 +354,6 @@
         .overlay .modal footer { @apply flex-col-reverse items-stretch; }
         .overlay .modal footer .btn { @apply w-full; }
         .toast { @apply right-4 left-4 max-w-none; }
-        .cronometro { @apply text-3xl; }
         .detalhes-dia-topo { @apply flex-col items-start; }
         .tabela-lancamentos { @apply min-w-[560px]; }
     }

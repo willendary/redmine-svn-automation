@@ -317,11 +317,13 @@ function htmlLinha(branch) {
             <td>${ultimaHtml}</td>
             <td>
                 <div class="acoes">
-                    <button class="acao" data-acao="log" data-chave="${escapar(branch.chave)}">Log</button>
-                    <button class="acao" data-acao="copiar" data-chave="${escapar(branch.chave)}">Copiar</button>
-                    <button class="acao verificar" data-acao="verificar" data-chave="${escapar(branch.chave)}" title="Compara os arquivos das revisões pendentes com o trunk">Verificar</button>
                     <button class="acao merge" data-acao="merge" data-chave="${escapar(branch.chave)}">Mesclar</button>
                     ${branch.pendentes.length > 0 ? `<button class="acao record" data-acao="marcar" data-chave="${escapar(branch.chave)}" title="Grava o mergeinfo no trunk (record-only) e commita">Marcar mesclada</button>` : ''}
+                    <span class="acao-grupo">
+                        <button class="acao icone" data-acao="copiar" data-chave="${escapar(branch.chave)}" title="Copiar URL da branch" aria-label="Copiar URL da branch">${window.SkyUI.icon('copy')}</button>
+                        <button class="acao icone" data-acao="log" data-chave="${escapar(branch.chave)}" title="Ver log da branch (TortoiseSVN)" aria-label="Ver log da branch">${window.SkyUI.icon('terminal')}</button>
+                        <button class="acao icone" data-acao="verificar" data-chave="${escapar(branch.chave)}" title="Comparar arquivos pendentes com o trunk" aria-label="Verificar contra o trunk">${window.SkyUI.icon('search')}</button>
+                    </span>
                 </div>
             </td>
         </tr>
@@ -426,7 +428,7 @@ async function verificarConteudoBranch(branch, botao) {
     const alvo = document.querySelector(`[data-verificacao="${branch.chave}"]`);
     if (botao) {
         botao.disabled = true;
-        botao.textContent = 'Verificando...';
+        botao.innerHTML = '<span class="spinner" aria-hidden="true"></span>';
     }
     if (alvo) {
         alvo.className = 'verificacao';
@@ -448,7 +450,7 @@ async function verificarConteudoBranch(branch, botao) {
     } finally {
         if (botao) {
             botao.disabled = false;
-            botao.textContent = 'Verificar';
+            botao.innerHTML = window.SkyUI.icon('search');
         }
     }
 }

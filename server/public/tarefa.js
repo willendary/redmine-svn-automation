@@ -1,11 +1,5 @@
 const taskId = window.location.pathname.split('/').pop().replace(/\D/g, '');
 let dados = null;
-let timer = { rodando: false };
-
-function segundosDecorridos() {
-    if (!timer.rodando || !timer.inicio) return 0;
-    return Math.max(0, (Date.now() - new Date(timer.inicio).getTime()) / 1000);
-}
 
 function tarefaAtual() {
     return dados ? dados.tarefa : null;
@@ -109,83 +103,16 @@ function renderizarFluxo() {
         : '<tr><td colspan="3" class="meta">Nenhuma tarefa relacionada por cópia.</td></tr>';
 }
 
-function renderizarTimer() {
-    const botao = document.getElementById('botao-timer');
-    const info = document.getElementById('timer-info');
-    const rodandoAqui = timer.rodando && String(timer.taskId) === String(taskId);
-
-    botao.innerHTML = rodandoAqui ? '&#9632;' : '&#9658;';
-    botao.title = rodandoAqui ? 'Parar e lançar horas' : 'Iniciar trabalho';
-    botao.setAttribute('aria-label', botao.title);
-    botao.classList.toggle('parar', rodandoAqui);
-
-    if (rodandoAqui) {
-        info.textContent = 'Em andamento nesta tarefa.';
-    } else if (timer.rodando) {
-        info.textContent = `Cronômetro rodando em T#${timer.taskId}. Iniciar aqui descarta o tempo da outra.`;
-    } else {
-        info.textContent = 'Nenhum cronômetro em andamento.';
-    }
-
-    atualizarCronometro();
-}
-
-function atualizarCronometro() {
-    const alvo = document.getElementById('cronometro');
-    const tarefa = tarefaAtual();
-    const base = tarefa ? tarefa.horasHoje : 0;
-    const rodandoAqui = timer.rodando && String(timer.taskId) === String(taskId);
-    alvo.textContent = formatarDuracao(base * 3600 + (rodandoAqui ? segundosDecorridos() : 0));
-}
-
 function renderizar() {
     document.getElementById('aviso').innerHTML = '';
     renderizarCabecalho();
     renderizarBranch();
     renderizarFluxo();
-    renderizarTimer();
 }
 
 async function carregar() {
     dados = await pedirJson(`/tarefa/${taskId}/dados`);
-    timer = dados.timer || { rodando: false };
     renderizar();
-}
-
-async function iniciarTimer() {
-    try {
-        timer = await pedirJson('/timer/iniciar', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ taskId })
-        });
-        await carregar();
-        mostrarToast(`Cronômetro iniciado em T#${taskId}.`);
-    } catch (erro) {
-        if (erro.status === 409 && erro.dados.anterior) {
-            const anterior = erro.dados.anterior;
-            const tempo = formatarDuracao(anterior.decorridoHoras * 3600);
-            const confirmado = window.confirm(
-                `T#${anterior.taskId} está em andamento há ${tempo}.\n\n` +
-                'Iniciar esta tarefa e descartar o tempo da anterior?'
-            );
-            if (!confirmado) return;
-
-            try {
-                timer = await pedirJson('/timer/iniciar', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ taskId, confirmarTroca: true })
-                });
-                await carregar();
-                mostrarToast(`Cronômetro iniciado em T#${taskId}.`);
-            } catch (falha) {
-                mostrarToast(falha.message, 'erro');
-            }
-            return;
-        }
-        mostrarToast(erro.message, 'erro');
-    }
 }
 
 function abrirModalCriarBranch() {
@@ -427,22 +354,9 @@ document.addEventListener('DOMContentLoaded', () => {
         carregar().catch(erro => mostrarToast(erro.message, 'erro'));
     });
 
-    document.getElementById('botao-timer').addEventListener('click', () => {
-        if (timer.rodando && String(timer.taskId) === String(taskId)) {
-            abrirModalRegistroTempo(timer, () => {
-                timer = { rodando: false };
-                carregar().catch(erro => mostrarToast(erro.message, 'erro'));
-            });
-        } else {
-            iniciarTimer();
-        }
-    });
-
     carregar().catch(erro => {
         document.getElementById('aviso').innerHTML = `<div class="aviso erro">${escapar(erro.message)}</div>`;
         document.getElementById('titulo').textContent = 'Tarefa indisponível';
         document.getElementById('branch-conteudo').textContent = 'Atualize a tarefa para consultar a branch.';
     });
-
-    setInterval(atualizarCronometro, 1000);
 });

@@ -240,19 +240,6 @@ function atualizarTarefa(id, payload) {
     });
 }
 
-async function pausarOutrasTarefas(idAtual) {
-    const emAndamento = await listarPaginado('/issues.json', 'issues', {
-        assigned_to_id: 'me',
-        status_id: String(STATUS.EM_ANDAMENTO)
-    });
-
-    for (const issue of emAndamento) {
-        if (String(issue.id) === String(idAtual)) continue;
-        // Uma tarefa que o fluxo nao deixa interromper nao pode impedir o timer.
-        await atualizarTarefa(issue.id, { status_id: STATUS.INTERROMPIDA }).catch(() => {});
-    }
-}
-
 module.exports = {
     STATUS,
     ATIVIDADE_DESENVOLVIMENTO,
@@ -278,6 +265,5 @@ module.exports = {
     obterLancamentoTempo,
     atualizarLancamentoTempo,
     registrarTempo,
-    atualizarTarefa,
-    pausarOutrasTarefas
+    atualizarTarefa
 };
