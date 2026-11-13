@@ -10,7 +10,11 @@ const {
     agruparRevisoes,
     mapearTarefa,
     diasDesde,
-    caminhoRelativo
+    caminhoRelativo,
+    caminhosAlteradosDaBranch,
+    analisarResumoDiff,
+    validarUrlBranch,
+    validarCaminhoDiff
 } = require('./merge_pendentes');
 
 const LOG_XML = `<?xml version="1.0" encoding="UTF-8"?>
@@ -102,6 +106,35 @@ test('caminhoRelativo converte caminho do repositorio para a raiz da branch', ()
     );
     assert.strictEqual(caminhoRelativo('/trunk/Financeiro/A.pas', raiz), '');
     assert.strictEqual(caminhoRelativo(raiz, raiz), '');
+});
+
+test('diff da branch reúne arquivos alterados desde a cópia e ignora a revisão de criação', () => {
+    const raiz = '/branches/Financeiro/2026/01/2026-02/T123';
+    assert.deepStrictEqual(caminhosAlteradosDaBranch(LOG_XML, raiz), [
+        'Financeiro/A.pas',
+        'Lib/B.pas'
+    ]);
+});
+
+test('diff resume arquivos de trunk e branch em caminhos relativos', () => {
+    const xml = `<diff><paths>
+        <path item="modified" props="none" kind="file">https://repo.skyinformatica.com.br/svn/sky/trunk/Financeiro/A.pas</path>
+        <path item="added" props="none" kind="file">https://repo.skyinformatica.com.br/svn/sky/branches/Financeiro/2026/01/2026-02/T123/Financeiro/B.pas</path>
+    </paths></diff>`;
+    assert.deepStrictEqual(analisarResumoDiff(xml, '/branches/Financeiro/2026/01/2026-02/T123'), [
+        { caminho: 'Financeiro/A.pas', situacao: 'modificado', tipo: 'file' },
+        { caminho: 'Financeiro/B.pas', situacao: 'adicionado', tipo: 'file' }
+    ]);
+});
+
+test('caminho do diff rejeita traversal e caminhos absolutos', () => {
+    assert.throws(() => validarCaminhoDiff('../config.json'), /inválido/);
+    assert.throws(() => validarCaminhoDiff('/etc/passwd'), /inválido/);
+    assert.strictEqual(validarCaminhoDiff('Financeiro/fontes/Arquivo.pas'), 'Financeiro/fontes/Arquivo.pas');
+    assert.strictEqual(validarUrlBranch('https://repo.skyinformatica.com.br/svn/sky/branches/Financeiro/2026/01/2026-02/T123'), 'https://repo.skyinformatica.com.br/svn/sky/branches/Financeiro/2026/01/2026-02/T123');
+    assert.throws(() => validarUrlBranch('https://example.com/branches/Financeiro/2026/01/2026-02/T123'), /inválida/);
+    assert.throws(() => validarUrlBranch('https://user:pass@repo.skyinformatica.com.br/svn/sky/branches/Financeiro/2026/01/2026-02/T123'), /inválida/);
+    assert.throws(() => validarUrlBranch('https://repo.skyinformatica.com.br/svn/sky/trunk'), /inválida/);
 });
 
 test('agruparRevisoes compacta contíguas e preserva lacunas', () => {

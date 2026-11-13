@@ -286,6 +286,125 @@ async function verificarConteudo({ branchUrl, revisoes }) {
     return { ok: diferentes.length === 0, verificados: resultados.length, diferentes };
 }
 
+function validarUrlBranch(branchUrl) {
+    let url;
+    try {
+        url = new URL(String(branchUrl || '').trim());
+    } catch (e) {
+        throw new Error('URL da branch inválida.');
+    }
+    const repositorio = new URL(REPO_BASE);
+    const prefixo = `${repositorio.pathname}/branches/`;
+    const segmentosBranch = url.pathname.slice(prefixo.length).split('/').filter(Boolean);
+
+    if (url.origin !== repositorio.origin || url.username || url.password || !url.pathname.startsWith(prefixo)
+        || !/^T\d+$/.test(segmentosBranch.at(-1) || '') || url.search || url.hash) {
+        throw new Error('URL da branch inválida.');
+    }
+
+    return url.toString().replace(/\/+$/, '');
+}
+
+function caminhosAlteradosDaBranch(xml, raiz) {
+    const caminhos = new Set();
+    for (const entrada of parseLog(xml)) {
+        for (const item of entrada.caminhos) {
+            const relativo = caminhoRelativo(item.caminho, raiz);
+            if (relativo) caminhos.add(relativo.slice(1));
+        }
+    }
+    return [...caminhos].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+}
+
+function caminhoRelativoDoDiff(caminho, raizBranch) {
+    let caminhoRepositorio = String(caminho || '');
+    if (/^https?:\/\//i.test(caminhoRepositorio)) {
+        try {
+            const url = new URL(caminhoRepositorio);
+            const repositorio = new URL(REPO_BASE);
+            if (url.origin !== repositorio.origin || !url.pathname.startsWith(`${repositorio.pathname}/`)) return '';
+            caminhoRepositorio = decodeURIComponent(url.pathname.slice(repositorio.pathname.length));
+        } catch (e) {
+            return '';
+        }
+    }
+
+    return (caminhoRelativo(caminhoRepositorio, '/trunk') || caminhoRelativo(caminhoRepositorio, raizBranch)).slice(1);
+}
+
+function analisarResumoDiff(xml, raizBranch) {
+    const entradas = parserXml.parse(xml)?.diff?.paths?.path || [];
+    const caminhos = Array.isArray(entradas) ? entradas : [entradas];
+    const porCaminho = new Map();
+    const situacoes = {
+        added: 'adicionado',
+        deleted: 'removido',
+        modified: 'modificado',
+        replaced: 'modificado'
+    };
+
+    for (const entrada of caminhos) {
+        const caminho = caminhoRelativoDoDiff(textoDoNo(entrada), raizBranch);
+        if (!caminho) continue;
+        const item = entrada['@_item'] || 'modified';
+        const situacao = entrada['@_props'] && entrada['@_props'] !== 'none' && item === 'none'
+            ? 'propriedades'
+            : (situacoes[item] || 'modificado');
+        porCaminho.set(caminho, {
+            caminho,
+            situacao,
+            tipo: entrada['@_kind'] || 'file'
+        });
+    }
+
+    return [...porCaminho.values()].sort((a, b) => a.caminho.localeCompare(b.caminho, 'pt-BR'));
+}
+
+async function listarDiffBranch(branchUrl) {
+    const url = validarUrlBranch(branchUrl);
+    const raiz = decodeURIComponent(new URL(url).pathname.slice(new URL(REPO_BASE).pathname.length));
+    const log = await executarSvn(['log', '--xml', '--verbose', '--stop-on-copy', '--non-interactive', url]);
+    const caminhos = caminhosAlteradosDaBranch(log, raiz);
+    if (caminhos.length === 0) return { branchUrl: url, trunkUrl: `${REPO_BASE}/trunk`, arquivos: [] };
+
+    const partes = [];
+    for (let i = 0; i < caminhos.length; i += 40) partes.push(caminhos.slice(i, i + 40));
+    const resumos = await executarLimitado(partes, 4, parte => executarSvn([
+        'diff', '--summarize', '--xml', '--non-interactive',
+        '--old', `${REPO_BASE}/trunk@`, '--new', `${url}@`, '--', ...parte.map(escaparPegRevision)
+    ]));
+    const arquivos = resumos.flatMap(resumo => analisarResumoDiff(resumo, raiz));
+    const unicos = [...new Map(arquivos.map(arquivo => [arquivo.caminho, arquivo])).values()]
+        .sort((a, b) => a.caminho.localeCompare(b.caminho, 'pt-BR'));
+
+    return { branchUrl: url, trunkUrl: `${REPO_BASE}/trunk`, arquivos: unicos };
+}
+
+function validarCaminhoDiff(caminho) {
+    const valor = String(caminho || '');
+    const partes = valor.split('/');
+    if (!valor || valor.startsWith('/') || valor.includes('\\') || valor.includes('\0')
+        || partes.some(parte => !parte || parte === '.' || parte === '..')) {
+        throw new Error('Caminho de arquivo inválido.');
+    }
+    return valor;
+}
+
+function escaparPegRevision(caminho) {
+    return caminho.includes('@') ? `${caminho}@` : caminho;
+}
+
+async function obterDiffArquivoBranch({ branchUrl, caminho }) {
+    const url = validarUrlBranch(branchUrl);
+    const caminhoSeguro = validarCaminhoDiff(caminho);
+    const raiz = `${REPO_BASE}/trunk@`;
+    const saida = await executarSvn([
+        'diff', '--non-interactive', '--old', raiz, '--new', `${url}@`, '--', escaparPegRevision(caminhoSeguro)
+    ], 6 * 1024 * 1024);
+    const binario = /Cannot display: file marked as a binary type|svn:mime-type\s*=\s*application\/octet-stream/i.test(saida);
+    return { diff: binario ? '' : saida, binario };
+}
+
 function extrairBranchDePath(caminho) {
     const match = String(caminho).match(/^\/branches\/([^/]+)\/(\d{4})\/(.+?)\/(T\d+)(?:\/(.*))?$/);
     if (!match) return null;
@@ -634,6 +753,12 @@ module.exports = {
     agruparRevisoes,
     marcarComoMesclada,
     verificarConteudo,
+    listarDiffBranch,
+    obterDiffArquivoBranch,
+    caminhosAlteradosDaBranch,
+    analisarResumoDiff,
+    validarUrlBranch,
+    validarCaminhoDiff,
     diasDesde,
     caminhoRelativo,
     executarLimitado,

@@ -19,7 +19,7 @@ Se a porta 3000 já estiver em uso por este projeto, o iniciador usa a instânci
 
 ## Telas
 
-- **Pendentes de merge:** indicadores calculados a partir dos filtros, busca, filtros por responsável/sistema/ano/situação/versão, revisões e ações de conferência e merge.
+- **Pendentes de merge:** indicadores calculados a partir dos filtros, busca, filtros por responsável/sistema/ano/situação/versão, revisões, conferência do conteúdo e diff visual branch/trunk em modal de tela cheia, com modos unificado e lado a lado.
 - **Minhas tarefas:** tarefas por sprint, cronômetro, total de horas, progresso da meta de 7h e histórico de lançamentos em largura completa.
 - **Detalhes da tarefa:** dados do Redmine, branch, cronômetro e tarefas relacionadas.
 - **Configurações:** conexão com Redmine e preferências de exibição.

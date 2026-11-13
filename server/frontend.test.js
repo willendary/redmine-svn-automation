@@ -16,6 +16,8 @@ const routes = {
   '/minhas-tarefas/dados':{tarefas:[task],dias:[{dia:'2026-11-11',horas:3.6},{dia:'2026-11-10',horas:7.5}],totalHoje:3.6},
   '/tarefa/93555/dados':{tarefa:task,branch:{encontrada:true,url:'https://svn.example/branches/T93555'},fluxo:[task]},
   '/merge-pendentes':{branches:[branch],responsaveis:['Dev'],redmine:{configurado:true},geradoEm:'2026-11-11T15:00:00Z'},
+  '/branch-diff':{success:true,branchUrl:branch.branchUrl,trunkUrl:'https://svn.example/trunk',arquivos:[{caminho:'Financeiro/A.pas',situacao:'modificado',tipo:'file'},{caminho:'Financeiro/B.pas',situacao:'adicionado',tipo:'file'}]},
+  '/branch-diff/arquivo':{success:true,binario:false,diff:'Index: A.pas\n===================================================================\n--- A.pas (trunk)\n+++ A.pas (branch)\n@@ -1,2 +1,3 @@\n context\n-old value\n+new <script>text</script>\n+extra line\n'},
   '/time-entries':{lancamentos:[{id:1,taskId:93555,assunto:longSubject,urlTarefa:task.url,atividade:'Desenvolvimento',comentario:'Análise e implementação completas',horas:3.6,data:'2026-11-11',atividadeId:9}],atividades:[{id:9,nome:'Desenvolvimento',padrao:true}]},
   '/logs/dados':{logs:['[10:00:00] [INFO] SVN consulta concluída','[10:01:00] [ERROR] Redmine indisponível']}
 };
@@ -127,6 +129,30 @@ test('pendentes: filtros, métricas e restauração dos filtros',async t=>{
   document.getElementById('limpar-filtros').click();await new Promise(resolve=>setTimeout(resolve,230));
   assert.equal(document.getElementById('total-resultados').textContent,'1');
   assert.equal(document.getElementById('filtro-sistema').value,'todos');
+  assert.deepEqual(errors,[]);
+});
+test('pendentes: diff abre arquivo e alterna entre unificado e lado a lado sem interpretar conteúdo',async t=>{
+  const {document,window,errors}=await open(t,'pendentes');
+  document.querySelector('[data-acao="diff"]').click();
+  await flush();await flush();
+  const painel=document.querySelector('.diff-modal');
+  assert.ok(painel);
+  assert.equal(painel.getAttribute('role'),'dialog');
+  assert.equal(painel.getAttribute('aria-modal'),'true');
+  assert.ok(document.querySelector('.pagina').hasAttribute('inert'));
+  assert.equal(painel.querySelectorAll('[data-diff-indice]').length,2,painel.innerHTML);
+  assert.match(painel.textContent,/Comparação com o trunk/);
+  assert.match(painel.querySelector('.diff-conteudo').textContent,/new <script>text<\/script>/);
+  assert.equal(painel.querySelector('.diff-conteudo script'),null);
+  painel.querySelector('[data-diff-modo="lado-a-lado"]').click();
+  assert.ok(painel.querySelector('.diff-linha-lados'));
+  assert.match(painel.querySelector('.diff-lados').textContent,/old value/);
+  assert.match(painel.querySelector('.diff-lados').textContent,/new <script>text<\/script>/);
+  painel.querySelectorAll('[data-diff-indice]')[1].click();await flush();
+  assert.match(painel.querySelector('[data-diff-titulo]').textContent,/Financeiro\/B\.pas/);
+  document.dispatchEvent(new window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));await flush();
+  assert.equal(document.querySelector('.diff-modal'),null);
+  assert.ok(!document.querySelector('.pagina').hasAttribute('inert'));
   assert.deepEqual(errors,[]);
 });
 test('logs: busca, pausa e cancelamento da limpeza não alteram o servidor',async t=>{

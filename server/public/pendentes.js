@@ -323,6 +323,7 @@ function htmlLinha(branch) {
                         <button class="acao icone" data-acao="copiar" data-chave="${escapar(branch.chave)}" title="Copiar URL da branch" aria-label="Copiar URL da branch">${window.SkyUI.icon('copy')}</button>
                         <button class="acao icone" data-acao="log" data-chave="${escapar(branch.chave)}" title="Ver log da branch (TortoiseSVN)" aria-label="Ver log da branch">${window.SkyUI.icon('terminal')}</button>
                         <button class="acao icone" data-acao="verificar" data-chave="${escapar(branch.chave)}" title="Comparar arquivos pendentes com o trunk" aria-label="Verificar contra o trunk">${window.SkyUI.icon('search')}</button>
+                        <button class="acao icone" data-acao="diff" data-chave="${escapar(branch.chave)}" title="Ver diff entre branch e trunk" aria-label="Ver diff entre branch e trunk">${window.SkyUI.icon('diff')}</button>
                     </span>
                 </div>
             </td>
@@ -453,6 +454,237 @@ async function verificarConteudoBranch(branch, botao) {
             botao.innerHTML = window.SkyUI.icon('search');
         }
     }
+}
+
+function analisarLinhasDiff(texto) {
+    const resultado = [];
+    let removidas = [];
+    let adicionadas = [];
+    let linhaAntiga = 0;
+    let linhaNova = 0;
+    let dentroHunk = false;
+
+    function finalizarAlteracao() {
+        if (removidas.length || adicionadas.length) {
+            resultado.push({ tipo: 'alteracao', removidas, adicionadas });
+            removidas = [];
+            adicionadas = [];
+        }
+    }
+
+    for (const linha of String(texto || '').replace(/\r/g, '').split('\n')) {
+        let hunk = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(linha);
+        if (!hunk) hunk = /^## -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? ##/.exec(linha);
+        if (hunk) {
+            finalizarAlteracao();
+            dentroHunk = true;
+            linhaAntiga = Number(hunk[1]);
+            linhaNova = Number(hunk[2]);
+            resultado.push({ tipo: 'hunk', texto: linha });
+            continue;
+        }
+        if (!dentroHunk || !linha || linha.startsWith('\\ No newline at end of file')) continue;
+
+        if (linha.startsWith(' ')) {
+            finalizarAlteracao();
+            resultado.push({
+                tipo: 'contexto',
+                antiga: { numero: linhaAntiga++, texto: linha.slice(1) },
+                nova: { numero: linhaNova++, texto: linha.slice(1) }
+            });
+        } else if (linha.startsWith('-')) {
+            removidas.push({ numero: linhaAntiga++, texto: linha.slice(1) });
+        } else if (linha.startsWith('+')) {
+            adicionadas.push({ numero: linhaNova++, texto: linha.slice(1) });
+        }
+    }
+    finalizarAlteracao();
+    return resultado;
+}
+
+function htmlLinhaUnificada(tipo, antiga, nova, texto) {
+    return `<div class="diff-linha ${tipo}"><span class="diff-numero">${antiga ?? ''}</span><span class="diff-numero">${nova ?? ''}</span><code>${escapar(texto)}</code></div>`;
+}
+
+function htmlDiffUnificado(linhas) {
+    return linhas.map(linha => {
+        if (linha.tipo === 'hunk') return `<div class="diff-hunk">${escapar(linha.texto)}</div>`;
+        if (linha.tipo === 'contexto') return htmlLinhaUnificada('contexto', linha.antiga.numero, linha.nova.numero, linha.antiga.texto);
+        return linha.removidas.map(item => htmlLinhaUnificada('removida', item.numero, '', `- ${item.texto}`)).join('')
+            + linha.adicionadas.map(item => htmlLinhaUnificada('adicionada', '', item.numero, `+ ${item.texto}`)).join('');
+    }).join('');
+}
+
+function htmlCelulaLado(linha, classe) {
+    return `<div class="diff-celula ${classe}"><span class="diff-numero">${linha ? linha.numero : ''}</span><code>${linha ? escapar(linha.texto) : ''}</code></div>`;
+}
+
+function htmlDiffLadoALado(linhas) {
+    return linhas.map(linha => {
+        if (linha.tipo === 'hunk') return `<div class="diff-hunk">${escapar(linha.texto)}</div>`;
+        if (linha.tipo === 'contexto') {
+            return `<div class="diff-linha-lados">${htmlCelulaLado(linha.antiga, 'contexto')}${htmlCelulaLado(linha.nova, 'contexto')}</div>`;
+        }
+        const quantidade = Math.max(linha.removidas.length, linha.adicionadas.length);
+        return Array.from({ length: quantidade }, (_, indice) =>
+            `<div class="diff-linha-lados">${htmlCelulaLado(linha.removidas[indice], 'removida')}${htmlCelulaLado(linha.adicionadas[indice], 'adicionada')}</div>`
+        ).join('');
+    }).join('');
+}
+
+async function consultarDiffArquivo(branch, caminho) {
+    const parametros = new URLSearchParams({ branchUrl: branch.branchUrl, caminho });
+    const resposta = await fetch(`/branch-diff/arquivo?${parametros}`);
+    const dados = await resposta.json();
+    if (!resposta.ok || !dados.success) throw new Error(dados.error || 'Falha ao carregar o diff.');
+    return dados;
+}
+
+function renderizarDiffArquivo(alvo, dados, modo) {
+    if (dados.binario) {
+        alvo.innerHTML = '<div class="diff-mensagem">Arquivo binário: não há diff textual para exibir.</div>';
+        return;
+    }
+
+    const linhas = analisarLinhasDiff(dados.diff);
+    if (linhas.length === 0) {
+        alvo.innerHTML = '<div class="diff-mensagem">Não há alterações textuais neste arquivo (pode haver apenas mudanças em propriedades SVN).</div>';
+        return;
+    }
+
+    alvo.innerHTML = modo === 'lado-a-lado'
+        ? `<div class="diff-cabecalho-lados"><span>TRUNK</span><span>BRANCH</span></div><div class="diff-lados">${htmlDiffLadoALado(linhas)}</div>`
+        : `<div class="diff-cabecalho-unificado"><span>− TRUNK</span><span>+ BRANCH</span></div><div class="diff-unificado">${htmlDiffUnificado(linhas)}</div>`;
+}
+
+async function abrirDiffBranch(branch, botao) {
+    document.querySelector('.diff-modal-overlay')?.remove();
+    botao.disabled = true;
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay diff-modal-overlay';
+    overlay.innerHTML = `
+        <div class="modal diff-modal">
+            <header class="modal-header diff-modal-header">
+                <div><span class="eyebrow">CONTROLE DE VERSÕES</span><h3>Diff · T#${escapar(branch.taskId)}</h3><p>Branch atual comparada ao trunk</p></div>
+                <button type="button" data-fechar aria-label="Fechar diff">&times;</button>
+            </header>
+            <div class="modal-body diff-modal-body">
+                <div class="diff-toolbar">
+                    <div><strong>Comparação com o trunk</strong><div class="meta" data-diff-resumo>Buscando arquivos alterados...</div></div>
+                    <div class="diff-modos" role="group" aria-label="Modo de visualização">
+                        <button type="button" class="ativo" data-diff-modo="unificado" aria-pressed="true">Unificado</button>
+                        <button type="button" data-diff-modo="lado-a-lado" aria-pressed="false">Lado a lado</button>
+                    </div>
+                </div>
+                <div class="diff-workspace">
+                    <aside class="diff-file-pane" aria-label="Arquivos diferentes">
+                        <div class="diff-file-pane-heading"><strong>Arquivos</strong><span data-diff-contagem>—</span></div>
+                        <nav class="diff-arquivos" role="tablist" aria-label="Arquivos diferentes"><div class="diff-carregando"><span class="spinner"></span>Carregando...</div></nav>
+                    </aside>
+                    <section class="diff-file-view" aria-label="Conteúdo do diff">
+                        <div class="diff-file-header"><span class="diff-status" data-diff-status>M</span><div class="diff-arquivo-titulo" data-diff-titulo>Selecione um arquivo</div></div>
+                        <div class="diff-conteudo" data-diff-conteudo aria-live="polite"><div class="diff-carregando"><span class="spinner"></span>Comparando branch com trunk...</div></div>
+                    </section>
+                </div>
+            </div>
+        </div>
+    `;
+    overlay.addEventListener('click', evento => {
+        if (evento.target === overlay) overlay.remove();
+    });
+    document.body.appendChild(overlay);
+    const modal = overlay.querySelector('.modal');
+    overlay.querySelectorAll('[data-fechar]').forEach(botaoFechar => botaoFechar.addEventListener('click', () => overlay.remove()));
+
+    try {
+        const parametros = new URLSearchParams({ branchUrl: branch.branchUrl });
+        const resposta = await fetch(`/branch-diff?${parametros}`);
+        const dados = await resposta.json();
+        if (!resposta.ok || !dados.success) throw new Error(dados.error || 'Falha ao comparar branch e trunk.');
+        if (overlay.isConnected) renderizarListaDiff(modal, branch, dados);
+    } catch (erro) {
+        if (overlay.isConnected) {
+            modal.querySelector('[data-diff-resumo]').textContent = 'Não foi possível comparar a branch.';
+            modal.querySelector('[data-diff-contagem]').textContent = 'Erro';
+            modal.querySelector('[data-diff-conteudo]').innerHTML = `<div class="diff-mensagem erro">${escapar(erro.message)}</div>`;
+            modal.querySelector('.diff-arquivos').innerHTML = '';
+        }
+    } finally {
+        botao.disabled = false;
+        botao.innerHTML = window.SkyUI.icon('diff');
+    }
+}
+
+function renderizarListaDiff(alvo, branch, dados) {
+    const arquivos = dados.arquivos || [];
+    const lista = alvo.querySelector('.diff-arquivos');
+    const area = alvo.querySelector('[data-diff-conteudo]');
+    if (arquivos.length === 0) {
+        alvo.querySelector('[data-diff-resumo]').textContent = 'Nenhum arquivo divergente.';
+        alvo.querySelector('[data-diff-contagem]').textContent = '0';
+        lista.innerHTML = '<div class="diff-mensagem">Sem arquivos diferentes.</div>';
+        area.innerHTML = '<div class="diff-mensagem sucesso">Branch e trunk estão iguais nos arquivos alterados pela branch.</div>';
+        return;
+    }
+
+    const rotulos = { modificado: 'M', adicionado: 'A', removido: 'D', propriedades: 'P', erro: '!' };
+    alvo.querySelector('[data-diff-resumo]').textContent = `T#${branch.taskId} · branch atual vs trunk atual · ${arquivos.length} arquivo(s) diferente(s)`;
+    alvo.querySelector('[data-diff-contagem]').textContent = String(arquivos.length);
+    lista.innerHTML = arquivos.map((arquivo, indice) => `
+        <button type="button" class="diff-arquivo${indice === 0 ? ' ativo' : ''}" role="tab" aria-selected="${indice === 0}" data-diff-indice="${indice}" title="${escapar(arquivo.caminho)}">
+            <span class="diff-status ${escapar(arquivo.situacao)}">${rotulos[arquivo.situacao] || '?'}</span>
+            <span class="diff-arquivo-nome">${escapar(arquivo.caminho)}</span>
+        </button>
+    `).join('');
+
+    let modo = 'unificado';
+    let requisicaoAtual = 0;
+    const titulo = alvo.querySelector('[data-diff-titulo]');
+    const statusTitulo = alvo.querySelector('[data-diff-status]');
+    let diffAtual = null;
+    let caminhoAtual = '';
+
+    function renderizarModo() {
+        if (diffAtual) renderizarDiffArquivo(area, diffAtual, modo);
+        alvo.querySelectorAll('[data-diff-modo]').forEach(botao => {
+            const ativo = botao.dataset.diffModo === modo;
+            botao.classList.toggle('ativo', ativo);
+            botao.setAttribute('aria-pressed', String(ativo));
+        });
+    }
+
+    async function selecionarArquivo(arquivo, botao) {
+        const idRequisicao = ++requisicaoAtual;
+        caminhoAtual = arquivo.caminho;
+        diffAtual = null;
+        titulo.textContent = arquivo.caminho;
+        statusTitulo.textContent = rotulos[arquivo.situacao] || '?';
+        statusTitulo.className = `diff-status ${escapar(arquivo.situacao)}`;
+        area.innerHTML = '<div class="diff-carregando"><span class="spinner"></span>Carregando diff...</div>';
+        lista.querySelectorAll('[data-diff-indice]').forEach(item => {
+            const ativo = item === botao;
+            item.classList.toggle('ativo', ativo);
+            item.setAttribute('aria-selected', String(ativo));
+        });
+
+        try {
+            const dadosArquivo = await consultarDiffArquivo(branch, arquivo.caminho);
+            if (idRequisicao !== requisicaoAtual || caminhoAtual !== arquivo.caminho) return;
+            diffAtual = dadosArquivo;
+            renderizarModo();
+        } catch (erro) {
+            if (idRequisicao === requisicaoAtual) area.innerHTML = `<div class="diff-mensagem erro">${escapar(erro.message)}</div>`;
+        }
+    }
+
+    lista.querySelectorAll('[data-diff-indice]').forEach(botao => botao.addEventListener('click', () => {
+        selecionarArquivo(arquivos[Number(botao.dataset.diffIndice)], botao);
+    }));
+    alvo.querySelectorAll('[data-diff-modo]').forEach(botao => botao.addEventListener('click', () => {
+        modo = botao.dataset.diffModo;
+        renderizarModo();
+    }));
+    selecionarArquivo(arquivos[0], alvo.querySelector('[data-diff-indice="0"]'));
 }
 
 function resumoVerificacao(dados) {
@@ -732,6 +964,7 @@ function ligarEventos() {
         if (botaoAcao.dataset.acao === 'log') abrirLogTortoise(branch.branchUrl);
         else if (botaoAcao.dataset.acao === 'copiar') copiarBranch(branch);
         else if (botaoAcao.dataset.acao === 'verificar') verificarConteudoBranch(branch, botaoAcao);
+        else if (botaoAcao.dataset.acao === 'diff') abrirDiffBranch(branch, botaoAcao);
         else if (botaoAcao.dataset.acao === 'merge') abrirModalMerge(branch);
         else if (botaoAcao.dataset.acao === 'marcar') marcarComoMesclada(branch, botaoAcao);
     });

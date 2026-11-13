@@ -39,6 +39,7 @@
     check:'M5 12l4 4L19 6', shield:'M12 3l8 4v6c0 4-8 8-8 8s-8-4-8-8V7zM8 12l3 3 5-6',
     copy:'M9 9h11v12H9zM15 9V3H3v12h6', external:'M14 3h7v7M21 3L10 14M10 3H3v18h18v-7',
     terminal:'M4 17l6-6-6-6M12 19h8',
+    diff:'M5 4h14v16H5zM12 4v16M8 8h1M8 12h1M15 8h1M15 12h1',
     trash:'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7'
   };
   const icon = name => '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="'+(paths[name] || paths.grid)+'"/></svg>';

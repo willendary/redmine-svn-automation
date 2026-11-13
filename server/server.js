@@ -639,6 +639,35 @@ app.get('/verificar-conteudo', async (req, res) => {
     }
 });
 
+app.get('/branch-diff', async (req, res) => {
+    const branchUrl = String(req.query.branchUrl || '');
+    if (!branchUrl) return res.status(400).json({ error: 'branchUrl é obrigatório.' });
+
+    try {
+        const resultado = await mergePendentes.listarDiffBranch(branchUrl);
+        res.json({ success: true, ...resultado });
+    } catch (erro) {
+        const status = erro.message === 'URL da branch inválida.' ? 400 : 500;
+        addLog(status === 400 ? 'WARN' : 'ERROR', `[DIFF] Falha ao comparar ${branchUrl}: ${erro.message}`);
+        res.status(status).json({ error: erro.message });
+    }
+});
+
+app.get('/branch-diff/arquivo', async (req, res) => {
+    const branchUrl = String(req.query.branchUrl || '');
+    const caminho = String(req.query.caminho || '');
+    if (!branchUrl || !caminho) return res.status(400).json({ error: 'branchUrl e caminho são obrigatórios.' });
+
+    try {
+        const resultado = await mergePendentes.obterDiffArquivoBranch({ branchUrl, caminho });
+        res.json({ success: true, ...resultado });
+    } catch (erro) {
+        const status = /URL da branch inválida|Caminho de arquivo inválido/.test(erro.message) ? 400 : 500;
+        addLog(status === 400 ? 'WARN' : 'ERROR', `[DIFF] Falha ao obter diff de ${caminho}: ${erro.message}`);
+        res.status(status).json({ error: erro.message });
+    }
+});
+
 // Marca a branch como mesclada no mergeinfo do trunk (record-only) e commita só a propriedade
 app.post('/marcar-mesclada', async (req, res) => {
     const { taskId, branchUrl, revisoes } = req.body || {};
