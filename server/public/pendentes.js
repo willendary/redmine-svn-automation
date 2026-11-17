@@ -286,7 +286,7 @@ function htmlLinha(branch) {
         ? `<div class="meta idade${dias > 30 ? ' velha' : ''}">há ${dias} dia${dias === 1 ? '' : 's'}</div>`
         : '';
     const ultimaHtml = ultima
-        ? `<div style="font-weight:600;color:#0369a1;">r${ultima.revisao}</div>
+        ? `<div class="rev-num">r${ultima.revisao}</div>
            <div class="meta">${escapar(formatarData(ultima.data))}</div>
            <div class="meta">por ${escapar(ultima.autor || 'desconhecido')}</div>
            ${idade}`
@@ -304,7 +304,7 @@ function htmlLinha(branch) {
                 ${responsavel ? `<div class="meta">${responsavel}</div>` : ''}
             </td>
             <td>
-                <div style="font-weight:600;">${escapar(sistema)}</div>
+                <div class="sistema-nome">${escapar(sistema)}</div>
                 ${versao ? `<div class="meta">${versao}</div>` : ''}
                 <div class="meta">${escapar(branch.pastaBranch)}</div>
             </td>
