@@ -24,6 +24,31 @@
   <div class="daily-overview-progress"><div class="daily-target"><strong id="meta-horas">—</strong><span>Meta diária: 7h</span></div><progress id="meta-progresso" value="0" max="7" aria-label="Progresso da meta diária"></progress></div>
   <div class="daily-overview-actions"><button class="btn btn-completar-meta oculto" id="btn-completar-meta" data-icon="check" type="button">Completar Meta</button></div>
 </section>
+<section class="card timesheet-panel" id="painel-semanal" aria-label="Timesheet Semanal e Sprint">
+  <div class="table-toolbar">
+    <div>
+      <span class="eyebrow">DISTRIBUIÇÃO DE TEMPO</span>
+      <h2>Timesheet Semanal & Sprint</h2>
+      <p class="section-description">Acompanhe suas horas na semana (meta de 35h) e o progresso na sprint ativa.</p>
+    </div>
+    <div class="sprint-badge-container" id="sprint-badge-container">
+      <span class="chip destaque" id="sprint-chip">Carregando sprint...</span>
+    </div>
+  </div>
+  <div class="timesheet-grid" id="timesheet-grid">
+    <div class="carregando">Carregando dados da semana...</div>
+  </div>
+  <div class="timesheet-footer">
+    <div class="timesheet-summary">
+      <span>Total da semana: <strong id="total-semana">—</strong></span>
+      <span class="meta" id="restante-semana">—</span>
+    </div>
+    <div class="timesheet-progress-bar">
+      <progress id="progresso-semana" value="0" max="35" aria-label="Progresso da meta semanal de 35h"></progress>
+      <span id="percentual-semana" class="progresso-percentual">0%</span>
+    </div>
+  </div>
+</section>
 <section class="card tasks-panel" aria-label="Lista de tarefas">
   <div class="table-toolbar"><div><h2>Suas tarefas <span class="section-count" id="total-tarefas">—</span></h2><p class="section-description">Todas as suas entregas, organizadas por sprint.</p></div><div class="search-field"><span data-icon-only="search"></span><input type="search" id="filtro" aria-label="Filtrar por título, ID ou sprint" placeholder="Buscar tarefa, ID ou sprint..."><kbd class="search-shortcut">/</kbd></div></div>
   <div class="tabela-wrapper task-table"><table><colgroup><col class="col-task"><col class="col-sprint"><col class="col-hours"><col class="col-actions"></colgroup><thead><tr><th>Tarefa</th><th>Sprint</th><th class="num">Horas hoje</th><th>Ações</th></tr></thead><tbody id="corpo"><tr><td colspan="4" class="carregando">Carregando suas tarefas...</td></tr></tbody></table></div>

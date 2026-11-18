@@ -279,6 +279,19 @@ app.get('/minhas-tarefas/dados', async (req, res) => {
     }
 });
 
+app.get('/minhas-tarefas/visao-semanal', async (req, res) => {
+    try {
+        const [semana, sprint] = await Promise.all([
+            redmine.obterVisaoSemanal(),
+            redmine.obterDadosSprintAtual().catch(() => ({ sprint: null, totalHoras: 0 }))
+        ]);
+        res.json({ success: true, semana, sprint });
+    } catch (erro) {
+        addLog('ERROR', `[HORAS] Falha ao obter visão semanal: ${erro.message}`);
+        res.status(500).json({ error: erro.message });
+    }
+});
+
 // Tarefas com revisões no SVN ainda não mescladas no trunk
 app.get('/merge-pendentes', async (req, res) => {
     try {

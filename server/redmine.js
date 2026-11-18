@@ -247,6 +247,117 @@ function atualizarTarefa(id, payload) {
     });
 }
 
+function obterInicioEFimDaSemana(data = new Date()) {
+    const d = new Date(data);
+    const day = d.getDay();
+    const diffParaSegunda = (day === 0 ? -6 : 1) - day;
+    const segunda = new Date(d);
+    segunda.setDate(d.getDate() + diffParaSegunda);
+
+    const dias = [];
+    const nomes = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'];
+    for (let i = 0; i < 5; i++) {
+        const diaData = new Date(segunda);
+        diaData.setDate(segunda.getDate() + i);
+        dias.push({
+            nome: nomes[i],
+            dataIso: dataLocal(diaData),
+            diaCurto: `${String(diaData.getDate()).padStart(2, '0')}/${String(diaData.getMonth() + 1).padStart(2, '0')}`
+        });
+    }
+
+    const sexta = new Date(segunda);
+    sexta.setDate(segunda.getDate() + 4);
+
+    return { segunda, sexta, dias };
+}
+
+async function obterVisaoSemanal(dataRef = new Date()) {
+    const { segunda, sexta, dias } = obterInicioEFimDaSemana(dataRef);
+    const entradas = await listarPaginado('/time_entries.json', 'time_entries', {
+        user_id: 'me',
+        from: dataLocal(segunda),
+        to: dataLocal(sexta)
+    });
+
+    const mapaHoras = new Map();
+    for (const e of entradas) {
+        const d = e.spent_on;
+        mapaHoras.set(d, (mapaHoras.get(d) || 0) + (Number(e.hours) || 0));
+    }
+
+    const diasCompletos = dias.map(d => {
+        const horas = Math.round((mapaHoras.get(d.dataIso) || 0) * 100) / 100;
+        return {
+            ...d,
+            horas,
+            meta: 7,
+            atingiuMeta: horas >= 7
+        };
+    });
+
+    const totalSemana = Math.round(somarHoras(entradas) * 100) / 100;
+    const metaSemana = 35;
+    const restanteSemana = Math.max(0, Math.round((metaSemana - totalSemana) * 100) / 100);
+
+    return {
+        inicio: dataLocal(segunda),
+        fim: dataLocal(sexta),
+        totalSemana,
+        metaSemana,
+        restanteSemana,
+        percentualSemana: Math.min(100, Math.round((totalSemana / metaSemana) * 100)),
+        dias: diasCompletos
+    };
+}
+
+async function obterDadosSprintAtual() {
+    const tarefas = await listarMinhasTarefas();
+    const tarefaComSprint = tarefas.find(t => t.fixed_version && t.fixed_version.name);
+    const sprintNome = tarefaComSprint ? tarefaComSprint.fixed_version.name : '';
+
+    if (!sprintNome) {
+        return { sprint: null, totalHoras: 0, totalEstimadas: 0, tarefasNaSprint: 0 };
+    }
+
+    const match = sprintNome.match(/^(\d{4})-\d{2}\s*\((\d{2})\/(\d{2})\s+a\s+(\d{2})\/(\d{2})\)/i);
+    let from = null;
+    let to = null;
+
+    if (match) {
+        const ano = Number(match[1]);
+        const diaIni = match[2];
+        const mesIni = match[3];
+        const diaFim = match[4];
+        const mesFim = match[5];
+        const anoFim = Number(mesFim) < Number(mesIni) ? ano + 1 : ano;
+        from = `${ano}-${mesIni}-${diaIni}`;
+        to = `${anoFim}-${mesFim}-${diaFim}`;
+    }
+
+    const tarefasNaSprint = tarefas.filter(t => t.fixed_version?.name === sprintNome);
+    const estimadas = tarefasNaSprint.reduce((acc, t) => acc + (Number(t.estimated_hours) || 0), 0);
+
+    let totalHoras = 0;
+    if (from && to) {
+        const entradas = await listarPaginado('/time_entries.json', 'time_entries', {
+            user_id: 'me',
+            from,
+            to
+        });
+        totalHoras = Math.round(somarHoras(entradas) * 100) / 100;
+    }
+
+    return {
+        sprint: sprintNome,
+        inicio: from,
+        fim: to,
+        totalHoras,
+        totalEstimadas: Math.round(estimadas * 100) / 100,
+        tarefasNaSprint: tarefasNaSprint.length
+    };
+}
+
 module.exports = {
     STATUS,
     ATIVIDADE_DESENVOLVIMENTO,
@@ -273,5 +384,8 @@ module.exports = {
     atualizarLancamentoTempo,
     registrarTempo,
     atualizarTarefa,
+    obterInicioEFimDaSemana,
+    obterVisaoSemanal,
+    obterDadosSprintAtual,
     CF_SKYRMTT_ID
 };

@@ -59,3 +59,15 @@ test('atualizarLancamentoTempo envia a nova data para o Redmine', async t => {
     assert.equal(JSON.parse(requisicao.opcoes.body).time_entry.spent_on, '2026-11-09');
     assert.deepEqual(JSON.parse(requisicao.opcoes.body).time_entry.custom_fields, [{ id: 12, value: '1' }]);
 });
+
+test('obterInicioEFimDaSemana calcula segunda a sexta corretamente', () => {
+    // Quarta-feira 18/11/2026
+    const quarta = new Date(2026, 10, 18);
+    const { dias } = redmine.obterInicioEFimDaSemana(quarta);
+
+    assert.equal(dias.length, 5);
+    assert.equal(dias[0].nome, 'Segunda');
+    assert.equal(dias[0].dataIso, '2026-11-16');
+    assert.equal(dias[4].nome, 'Sexta');
+    assert.equal(dias[4].dataIso, '2026-11-20');
+});

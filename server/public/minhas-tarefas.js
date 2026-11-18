@@ -8,6 +8,7 @@ let lancamentosDia = [];
 let atividadesLancamento = [];
 let carregandoLancamentos = false;
 let erroLancamentos = '';
+let dadosSemanais = null;
 
 function htmlBadges(tarefa) {
     const status = `<span class="badge${tarefa.fechada ? ' fechada' : ''}">${escapar(tarefa.status || 'sem status')}</span>`;
@@ -151,6 +152,61 @@ function renderizar() {
     document.getElementById('dias').innerHTML = diasVisiveis.length > 0
         ? diasVisiveis.map(htmlLinhaDia).join('')
         : '<tr><td colspan="2" class="meta">Sem horas lançadas no período.</td></tr>';
+
+    renderizarTimesheet();
+}
+
+function renderizarTimesheet() {
+    if (!dadosSemanais || !dadosSemanais.semana) return;
+    const { semana, sprint } = dadosSemanais;
+
+    const elSprint = document.getElementById('sprint-chip');
+    if (elSprint) {
+        if (sprint && sprint.sprint) {
+            elSprint.innerHTML = `Sprint ativa: <strong>${escapar(sprint.sprint)}</strong> · <strong>${formatarHoras(sprint.totalHoras)}</strong> lançadas`;
+        } else {
+            elSprint.innerHTML = 'Nenhuma sprint ativa encontrada';
+        }
+    }
+
+    const elGrid = document.getElementById('timesheet-grid');
+    if (elGrid && semana.dias) {
+        const hojeIso = new Date().toLocaleDateString('en-CA');
+        elGrid.innerHTML = semana.dias.map(dia => {
+            const ehHoje = dia.dataIso === hojeIso;
+            const ok = dia.atingiuMeta;
+            const pct = Math.min(100, Math.round((dia.horas / 7) * 100));
+            return `
+                <div class="timesheet-col${ehHoje ? ' hoje' : ''}${ok ? ' meta-ok' : ''}" data-dia-clique="${escapar(dia.dataIso)}" title="Clique para lançar horas em ${escapar(dia.nome)}">
+                    <div class="timesheet-col-header">
+                        <span class="timesheet-nome-dia">${escapar(dia.nome)}</span>
+                        <span class="timesheet-data-dia">${escapar(dia.diaCurto)}</span>
+                    </div>
+                    <div class="timesheet-horas">
+                        <strong>${formatarHoras(dia.horas)}</strong>
+                        <span class="meta-mini">/ 7h</span>
+                    </div>
+                    <div class="timesheet-mini-progresso">
+                        <div class="timesheet-barra" style="width: ${pct}%"></div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    const elTotal = document.getElementById('total-semana');
+    const elRestante = document.getElementById('restante-semana');
+    const elProgresso = document.getElementById('progresso-semana');
+    const elPercentual = document.getElementById('percentual-semana');
+
+    if (elTotal) elTotal.textContent = `${formatarHoras(semana.totalSemana)} / ${semana.metaSemana}h`;
+    if (elRestante) {
+        elRestante.textContent = semana.restanteSemana > 0
+            ? `Faltam ${formatarHoras(semana.restanteSemana)} para atingir 35h semanais`
+            : 'Meta semanal atingida! Parabéns!';
+    }
+    if (elProgresso) elProgresso.value = Math.min(semana.metaSemana, semana.totalSemana);
+    if (elPercentual) elPercentual.textContent = `${semana.percentualSemana}%`;
 }
 
 async function carregarLancamentosDia(dia) {
@@ -314,12 +370,14 @@ function abrirModalLancamento(dia, lancamento = null, horasSugeridas = null, tas
 }
 
 async function carregar() {
-    const [dados, configuracao] = await Promise.all([
+    const [dados, configuracao, semanal] = await Promise.all([
         pedirJson('/minhas-tarefas/dados'),
-        pedirJson('/preferencias').catch(() => null)
+        pedirJson('/preferencias').catch(() => null),
+        pedirJson('/minhas-tarefas/visao-semanal').catch(() => null)
     ]);
     tarefas = dados.tarefas || [];
     dias = dados.dias || [];
+    dadosSemanais = semanal;
     totalHoje = Number(dados.totalHoje) || 0;
     const configuracaoExibicao = configuracao?.secoes
         ?.flatMap(secao => secao.configuracoes || [])
@@ -378,6 +436,16 @@ document.addEventListener('DOMContentLoaded', () => {
             if (lancamento) abrirModalLancamento(lancamento.data, lancamento);
         }
     });
+
+    const elGrid = document.getElementById('timesheet-grid');
+    if (elGrid) {
+        elGrid.addEventListener('click', evento => {
+            const col = evento.target.closest('[data-dia-clique]');
+            if (col && col.dataset.diaClique) {
+                abrirModalLancamento(col.dataset.diaClique);
+            }
+        });
+    }
 
     carregar().catch(erro => {
         document.getElementById('aviso').innerHTML = `<div class="aviso erro">${escapar(erro.message)}</div>`;
