@@ -122,12 +122,16 @@
         '</div>' +
       '</div>' +
       '<div class="topbar-right app-bar-right">' +
+        '<button type="button" class="global-search-btn" id="globalSearchBtn" aria-label="Busca global">' +
+          icon('search') + '<span>Buscar...</span><kbd>Ctrl K</kbd>' +
+        '</button>' +
         '<button type="button" id="theme-toggle" class="theme-toggle" aria-label="Alternar tema"></button>' +
         '<time class="app-date"></time>' +
         '<span class="connection-state local-label online"><span class="status-dot online"></span><span>Ambiente local</span></span>' +
       '</div>';
     document.body.prepend(bar);
     syncThemeButton();
+    document.getElementById('globalSearchBtn')?.addEventListener('click', abrirBuscaGlobal);
     document.getElementById('theme-toggle').addEventListener('click',() => {
       selectedTheme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
       try { localStorage.setItem(THEME_KEY,selectedTheme); } catch (_) {}
@@ -155,6 +159,11 @@
     toggle.addEventListener('click',() => setMenu(!document.body.classList.contains('nav-open')));
     scrim.addEventListener('click',() => setMenu(false));
     document.addEventListener('keydown',event => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        abrirBuscaGlobal();
+        return;
+      }
       const editing = /INPUT|SELECT|TEXTAREA/.test(event.target.tagName) || event.target.isContentEditable;
       if (event.key === '/' && !editing && !document.querySelector('[aria-modal="true"]')) {
         const search = document.querySelector('input[type="search"]');
@@ -230,5 +239,175 @@
     });
     sync();
   }
+
+  let cacheTarefasBusca = null;
+  async function carregarTarefasParaBusca() {
+    if (cacheTarefasBusca) return cacheTarefasBusca;
+    try {
+      const res = await fetch('/minhas-tarefas/dados');
+      if (res.ok) {
+        const dados = await res.json();
+        cacheTarefasBusca = dados.tarefas || [];
+        return cacheTarefasBusca;
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  function abrirBuscaGlobal() {
+    const antigo = document.getElementById('global-search-overlay');
+    if (antigo) { antigo.remove(); return; }
+
+    const overlay = document.createElement('div');
+    overlay.id = 'global-search-overlay';
+    overlay.className = 'global-search-overlay';
+    overlay.innerHTML =
+      '<div class="global-search-box" role="dialog" aria-modal="true" aria-label="Busca global">' +
+        '<div class="global-search-header">' +
+          icon('search') +
+          '<input type="text" id="global-search-input" class="global-search-input" placeholder="Digite número da tarefa (ex: 93555), título ou página..." autocomplete="off" spellcheck="false">' +
+          '<kbd class="global-search-esc">ESC</kbd>' +
+        '</div>' +
+        '<div class="global-search-results" id="global-search-results"></div>' +
+        '<div class="global-search-footer">' +
+          '<span><kbd>↑</kbd> <kbd>↓</kbd> para navegar</span>' +
+          '<span><kbd>↵</kbd> para abrir</span>' +
+          '<span><kbd>ESC</kbd> para fechar</span>' +
+        '</div>' +
+      '</div>';
+
+    document.body.appendChild(overlay);
+    const input = overlay.querySelector('#global-search-input');
+    const containerResultados = overlay.querySelector('#global-search-results');
+    input.focus();
+
+    carregarTarefasParaBusca();
+
+    const rotasFixas = [
+      { titulo: 'Pendentes de merge', subtitulo: 'Visualizar revisões e diff de branches', url: '/pendentes', icone: 'merge' },
+      { titulo: 'Minhas tarefas', subtitulo: 'Controle de entregas, horas e timesheet', url: '/minhas-tarefas', icone: 'tasks' },
+      { titulo: 'Configurações', subtitulo: 'Conexão com Redmine e preferências', url: '/config', icone: 'settings' },
+      { titulo: 'Logs do sistema', subtitulo: 'Histórico em tempo real de requisições e SVN', url: '/logs', icone: 'logs' }
+    ];
+
+    let itensAtuais = [];
+    let indiceSelecionado = 0;
+
+    function renderizarResultados() {
+      const query = input.value.trim();
+      const apenasNumeros = query.replace(/\D/g, '');
+      const itens = [];
+
+      if (apenasNumeros.length > 0) {
+        itens.push({
+          tipo: 'tarefa',
+          titulo: 'Abrir Tarefa T#' + apenasNumeros,
+          subtitulo: 'Ir para os detalhes da tarefa no workspace',
+          url: '/tarefa/' + apenasNumeros,
+          icone: 'tasks'
+        });
+      }
+
+      if (query.length > 0) {
+        const termo = query.toLowerCase();
+        if (cacheTarefasBusca) {
+          const tarefasEncontradas = cacheTarefasBusca.filter(t =>
+            String(t.id).includes(termo) ||
+            (t.assunto && t.assunto.toLowerCase().includes(termo)) ||
+            (t.sprint && t.sprint.toLowerCase().includes(termo))
+          ).slice(0, 5);
+
+          tarefasEncontradas.forEach(t => {
+            if (String(t.id) !== apenasNumeros) {
+              itens.push({
+                tipo: 'tarefa',
+                titulo: 'T#' + t.id + ' ' + (t.assunto || ''),
+                subtitulo: (t.sprint || 'Sem sprint') + ' · ' + (t.status || ''),
+                url: '/tarefa/' + t.id,
+                icone: 'tasks'
+              });
+            }
+          });
+        }
+
+        rotasFixas.forEach(r => {
+          if (r.titulo.toLowerCase().includes(termo) || r.subtitulo.toLowerCase().includes(termo)) {
+            itens.push({ tipo: 'pagina', ...r });
+          }
+        });
+      } else {
+        rotasFixas.forEach(r => itens.push({ tipo: 'pagina', ...r }));
+      }
+
+      itensAtuais = itens;
+      if (indiceSelecionado >= itens.length) indiceSelecionado = 0;
+
+      if (itens.length === 0) {
+        containerResultados.innerHTML = '<div class="global-search-empty">Nenhum resultado encontrado para "<strong>' + input.value + '</strong>"</div>';
+        return;
+      }
+
+      containerResultados.innerHTML = itens.map((item, index) =>
+        '<div class="search-result-item' + (index === indiceSelecionado ? ' selected' : '') + '" data-index="' + index + '">' +
+          '<span class="search-item-icon">' + icon(item.icone || 'arrow') + '</span>' +
+          '<div class="search-item-info">' +
+            '<div class="search-item-title">' + item.titulo + '</div>' +
+            '<div class="search-item-sub">' + item.subtitulo + '</div>' +
+          '</div>' +
+          '<span class="search-item-enter">↵</span>' +
+        '</div>'
+      ).join('');
+    }
+
+    renderizarResultados();
+
+    input.addEventListener('input', () => {
+      indiceSelecionado = 0;
+      renderizarResultados();
+    });
+
+    overlay.addEventListener('click', e => {
+      if (e.target === overlay) overlay.remove();
+      const itemEl = e.target.closest('.search-result-item');
+      if (itemEl) {
+        const index = Number(itemEl.dataset.index);
+        const item = itensAtuais[index];
+        if (item) {
+          overlay.remove();
+          location.href = item.url;
+        }
+      }
+    });
+
+    overlay.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        overlay.remove();
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (itensAtuais.length > 0) {
+          indiceSelecionado = (indiceSelecionado + 1) % itensAtuais.length;
+          renderizarResultados();
+          overlay.querySelector('.search-result-item.selected')?.scrollIntoView({ block: 'nearest' });
+        }
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (itensAtuais.length > 0) {
+          indiceSelecionado = (indiceSelecionado - 1 + itensAtuais.length) % itensAtuais.length;
+          renderizarResultados();
+          overlay.querySelector('.search-result-item.selected')?.scrollIntoView({ block: 'nearest' });
+        }
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        const item = itensAtuais[indiceSelecionado];
+        if (item) {
+          overlay.remove();
+          location.href = item.url;
+        }
+      }
+    });
+  }
+  window.SkyUI.abrirBuscaGlobal = abrirBuscaGlobal;
+
   document.addEventListener('DOMContentLoaded',init);
 })();
