@@ -282,10 +282,14 @@ app.get('/minhas-tarefas/dados', async (req, res) => {
     }
 
     try {
-        const [issues, entradasHoje, dias] = await Promise.all([
+        const [issues, entradasHoje, dias, atividades] = await Promise.all([
             redmine.listarMinhasTarefas(),
             redmine.obterEntradasHoje(),
-            redmine.obterHorasPorDia(10)
+            redmine.obterHorasPorDia(10),
+            redmine.obterAtividadesTempo().catch(err => {
+                addLog('WARN', `[TAREFAS] Não foi possível carregar atividades de tempo: ${err.message}`);
+                return [];
+            })
         ]);
 
         const porTarefa = redmine.agruparHorasPorTarefa(entradasHoje);
@@ -298,10 +302,21 @@ app.get('/minhas-tarefas/dados', async (req, res) => {
             success: true,
             tarefas,
             totalHoje: redmine.somarHoras(entradasHoje),
-            dias
+            dias,
+            atividades
         });
     } catch (erro) {
         addLog('ERROR', `[TAREFAS] Falha ao listar minhas tarefas: ${erro.message}`);
+        res.status(500).json({ error: erro.message });
+    }
+});
+
+app.get('/atividades-tempo', async (req, res) => {
+    try {
+        const atividades = await redmine.obterAtividadesTempo();
+        res.json({ success: true, atividades });
+    } catch (erro) {
+        addLog('ERROR', `[HORAS] Falha ao consultar atividades de tempo: ${erro.message}`);
         res.status(500).json({ error: erro.message });
     }
 });

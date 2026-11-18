@@ -13,7 +13,9 @@ const branch = { chave:'branch-93555', taskId:93555, sistema:'financeiro', pasta
 const routes = {
   '/config-redmine':{configurado:true,url:'https://redmine.example'},
   '/preferencias':preferences,
-  '/minhas-tarefas/dados':{tarefas:[task],dias:[{dia:'2026-11-11',horas:3.6},{dia:'2026-11-10',horas:7.5}],totalHoje:3.6},
+  '/minhas-tarefas/dados':{tarefas:[task],dias:[{dia:'2026-11-11',horas:3.6},{dia:'2026-11-10',horas:7.5}],totalHoje:3.6,atividades:[{id:9,nome:'Desenvolvimento',padrao:true}]},
+  '/minhas-tarefas/visao-semanal':{semana:{totalSemana:35,metaSemana:35,dias:[{dia:'2026-11-09',horas:7},{dia:'2026-11-10',horas:7},{dia:'2026-11-11',horas:7},{dia:'2026-11-12',horas:7},{dia:'2026-11-13',horas:7}]},sprint:{sprint:'Sprint 2026.11',totalHoras:35}},
+  '/atividades-tempo':{atividades:[{id:9,nome:'Desenvolvimento',padrao:true}]},
   '/tarefa/93555/dados':{tarefa:task,branch:{encontrada:true,url:'https://svn.example/branches/T93555'},fluxo:[task]},
   '/merge-pendentes':{branches:[branch],responsaveis:['Dev'],redmine:{configurado:true},geradoEm:'2026-11-11T15:00:00Z'},
   '/branch-diff':{success:true,branchUrl:branch.branchUrl,trunkUrl:'https://svn.example/trunk',arquivos:[{caminho:'Financeiro/A.pas',situacao:'modificado',tipo:'file'},{caminho:'Financeiro/B.pas',situacao:'adicionado',tipo:'file'}]},
@@ -117,6 +119,21 @@ test('lançamentos: edição abre diálogo acessível e Escape restaura o foco s
   assert.equal(document.querySelector('[role="dialog"]'),null);
   assert.equal(document.activeElement,edit);
   assert.ok(!requests.some(request=>request.method!=='GET'));
+});
+test('lançamentos: modal de lançamento possui opções de atividade válidas mesmo sem expandir dia',async t=>{
+  const {document,window,errors}=await open(t,'minhas-tarefas');
+  const btnCompletar=document.getElementById('btn-completar-meta');
+  assert.ok(btnCompletar);
+  btnCompletar.click();await flush();
+  const modal=document.querySelector('[role="dialog"]');
+  assert.ok(modal);
+  const select=modal.querySelector('#lancamento-atividade');
+  assert.ok(select);
+  assert.ok(select.options.length > 0, 'Select de atividades deve conter opções');
+  assert.equal(select.value,'9');
+  assert.equal(select.options[0].textContent,'Desenvolvimento');
+  document.dispatchEvent(new window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));await flush();
+  assert.deepEqual(errors,[]);
 });
 test('pendentes: filtros, métricas e restauração dos filtros',async t=>{
   const {document,window,errors}=await open(t,'pendentes');

@@ -220,7 +220,9 @@ async function carregarLancamentosDia(dia) {
         const dados = await pedirJson(`/time-entries?date=${encodeURIComponent(dia)}`);
         if (diaExpandido !== dia) return;
         lancamentosDia = dados.lancamentos || [];
-        atividadesLancamento = dados.atividades || [];
+        if (Array.isArray(dados.atividades) && dados.atividades.length > 0) {
+            atividadesLancamento = dados.atividades;
+        }
     } catch (erro) {
         if (diaExpandido !== dia) return;
         erroLancamentos = erro.message;
@@ -230,6 +232,22 @@ async function carregarLancamentosDia(dia) {
             renderizar();
         }
     }
+}
+
+async function garantirAtividades() {
+    if (Array.isArray(atividadesLancamento) && atividadesLancamento.length > 0) {
+        return atividadesLancamento;
+    }
+    try {
+        const dados = await pedirJson('/atividades-tempo');
+        if (dados && Array.isArray(dados.atividades) && dados.atividades.length > 0) {
+            atividadesLancamento = dados.atividades;
+            return atividadesLancamento;
+        }
+    } catch (_) {
+        // Ignora erro e mantém lista vazia ou fallback
+    }
+    return atividadesLancamento;
 }
 
 function alternarDetalhesDia(dia) {
@@ -267,7 +285,10 @@ function obterTotalHorasRegistradasNoDia(dataIso, lancamentoAtual = null) {
     return Math.round(totalDia * 100) / 100;
 }
 
-function abrirModalLancamento(dia, lancamento = null, horasSugeridas = null, taskIdSugerido = null) {
+async function abrirModalLancamento(dia, lancamento = null, horasSugeridas = null, taskIdSugerido = null) {
+    if (!atividadesLancamento || atividadesLancamento.length === 0) {
+        await garantirAtividades();
+    }
     const editando = Boolean(lancamento);
     const dataOriginal = lancamento?.data || dia;
     const atividadePadrao = atividadesLancamento.find(item => item.padrao) || atividadesLancamento[0];
@@ -275,9 +296,11 @@ function abrirModalLancamento(dia, lancamento = null, horasSugeridas = null, tas
     const campoTarefa = editando
         ? `<div class="campo"><label>Tarefa ou projeto</label><div class="campo-leitura">${lancamento.taskId ? `T#${lancamento.taskId} ${escapar(lancamento.assunto || '')}` : `Projeto: ${escapar(lancamento.projeto || 'sem projeto')}`}</div></div>`
         : '<div class="campo"><label for="lancamento-tarefa">Número da tarefa</label><input type="number" id="lancamento-tarefa" aria-label="Número da tarefa" min="1" step="1" required placeholder="Ex.: 93555" value="' + (taskIdSugerido ? String(taskIdSugerido) : '') + '"></div>';
-    const opcoesAtividade = atividadesLancamento.map(item =>
-        `<option value="${item.id}"${item.id === Number(atividadeSelecionada) ? ' selected' : ''}>${escapar(item.nome)}</option>`
-    ).join('');
+    const opcoesAtividade = (atividadesLancamento && atividadesLancamento.length > 0)
+        ? atividadesLancamento.map(item =>
+            `<option value="${item.id}"${item.id === Number(atividadeSelecionada) ? ' selected' : ''}>${escapar(item.nome)}</option>`
+        ).join('')
+        : '<option value="">Nenhuma atividade disponível</option>';
 
     const overlay = abrirModal(`
         <div class="modal-header">
@@ -388,6 +411,11 @@ function abrirModalLancamento(dia, lancamento = null, horasSugeridas = null, tas
             erro.classList.remove('oculto');
             return;
         }
+        if (!Number.isInteger(atividadeId) || atividadeId <= 0) {
+            erro.textContent = 'Selecione uma atividade válida.';
+            erro.classList.remove('oculto');
+            return;
+        }
         if (!Number.isFinite(horas) || horas <= 0) {
             erro.textContent = 'Informe uma quantidade de horas maior que zero.';
             erro.classList.remove('oculto');
@@ -442,6 +470,9 @@ async function carregar() {
     ]);
     tarefas = dados.tarefas || [];
     dias = dados.dias || [];
+    if (Array.isArray(dados.atividades) && dados.atividades.length > 0) {
+        atividadesLancamento = dados.atividades;
+    }
     dadosSemanais = semanal;
     totalHoje = Number(dados.totalHoje) || 0;
     const configuracaoExibicao = configuracao?.secoes

@@ -190,15 +190,25 @@ async function obterLancamentosPorDia(data) {
     }).sort((a, b) => Number(a.id) - Number(b.id));
 }
 
-async function obterAtividadesTempo() {
+let cacheAtividadesTempo = null;
+let expiraCacheAtividades = 0;
+
+async function obterAtividadesTempo(forcarAtualizacao = false) {
+    const agora = Date.now();
+    if (!forcarAtualizacao && cacheAtividadesTempo && agora < expiraCacheAtividades) {
+        return cacheAtividadesTempo;
+    }
     const dados = await requisitar('/enumerations/time_entry_activities.json');
-    return (dados.time_entry_activities || [])
+    const atividades = (dados.time_entry_activities || [])
         .filter(atividade => atividade.active !== false)
         .map(atividade => ({
             id: Number(atividade.id),
             nome: atividade.name || '',
             padrao: Boolean(atividade.is_default)
         }));
+    cacheAtividadesTempo = atividades;
+    expiraCacheAtividades = agora + 10 * 60 * 1000;
+    return atividades;
 }
 
 async function obterLancamentoTempo(id) {
