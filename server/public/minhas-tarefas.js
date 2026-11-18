@@ -244,6 +244,29 @@ function alternarDetalhesDia(dia) {
     carregarLancamentosDia(dia);
 }
 
+function obterTotalHorasRegistradasNoDia(dataIso, lancamentoAtual = null) {
+    if (!dataIso) return 0;
+    let totalDia = 0;
+
+    if (diaExpandido === dataIso && Array.isArray(lancamentosDia) && lancamentosDia.length > 0) {
+        totalDia = lancamentosDia.reduce((acc, l) => acc + (Number(l.horas) || 0), 0);
+    } else {
+        const d = dias.find(item => item.dia === dataIso);
+        if (d) {
+            totalDia = Number(d.horas) || 0;
+        } else if (dataIso === new Date().toLocaleDateString('en-CA')) {
+            totalDia = Number(totalHoje) || 0;
+        }
+    }
+
+    if (lancamentoAtual && lancamentoAtual.data === dataIso) {
+        const horasDeste = Number(lancamentoAtual.horas) || 0;
+        totalDia = Math.max(0, totalDia - horasDeste);
+    }
+
+    return Math.round(totalDia * 100) / 100;
+}
+
 function abrirModalLancamento(dia, lancamento = null, horasSugeridas = null, taskIdSugerido = null) {
     const editando = Boolean(lancamento);
     const dataOriginal = lancamento?.data || dia;
@@ -279,8 +302,9 @@ function abrirModalLancamento(dia, lancamento = null, horasSugeridas = null, tas
                 <button type="button" class="btn secundario btn-atalho-hora" data-minutos="30" title="Adicionar 30 minutos">+30m</button>
                 <button type="button" class="btn secundario btn-atalho-hora" data-minutos="60" title="Adicionar 1 hora">+1h</button>
                 <button type="button" class="btn secundario btn-atalho-hora" data-minutos="120" title="Adicionar 2 horas">+2h</button>
-                <button type="button" class="btn secundario btn-atalho-hora" data-fixo="fechar-dia" title="Preencher com o que falta para 7h">Fechar Dia</button>
+                <button type="button" class="btn secundario btn-atalho-hora" data-fixo="fechar-dia" title="Preencher com o que falta para completar 7h no dia">Fechar Dia</button>
             </div>
+            <div id="preview-total-dia" class="meta" style="margin-top:8px; font-size:12px;"></div>
             </div>
             <div class="campo">
                 <label for="lancamento-comentario">Comentário</label>
@@ -295,17 +319,58 @@ function abrirModalLancamento(dia, lancamento = null, horasSugeridas = null, tas
     `);
 
     overlay.querySelectorAll('[data-fechar]').forEach(botao => botao.addEventListener('click', () => overlay.remove()));
+    const inputData = overlay.querySelector('#lancamento-data');
     const inputHoras = overlay.querySelector('#lancamento-horas');
+    const previewTotal = overlay.querySelector('#preview-total-dia');
+
+    function atualizarPreviewDia() {
+        const dataEscolhida = inputData.value;
+        const horasOutros = obterTotalHorasRegistradasNoDia(dataEscolhida, editando ? lancamento : null);
+        const horasDigitadas = Number(inputHoras.value) || 0;
+        const totalPrevisto = Math.round((horasOutros + horasDigitadas) * 100) / 100;
+
+        if (!previewTotal) return;
+
+        if (horasDigitadas === 0 && horasOutros === 0) {
+            previewTotal.innerHTML = '<span class="meta">Nenhuma hora registrada neste dia ainda. Meta: 7,00h.</span>';
+        } else if (totalPrevisto > 7.00) {
+            const excesso = Math.round((totalPrevisto - 7.00) * 100) / 100;
+            previewTotal.innerHTML = `<span style="color:var(--amber, #b45309); font-weight:600;">⚠️ Total no dia ficará em ${formatarHoras(totalPrevisto)} (excede a meta de 7h em ${formatarHoras(excesso)})</span>`;
+        } else if (totalPrevisto === 7.00) {
+            previewTotal.innerHTML = `<span style="color:var(--teal, #0d9488); font-weight:600;">✓ Total no dia completará exatamente a meta de 7,00h!</span>`;
+        } else {
+            const falta = Math.round((7.00 - totalPrevisto) * 100) / 100;
+            previewTotal.innerHTML = `<span class="meta">Total no dia ficará em <strong>${formatarHoras(totalPrevisto)}</strong> (faltarão ${formatarHoras(falta)} para 7h).</span>`;
+        }
+    }
+
+    inputHoras.addEventListener('input', atualizarPreviewDia);
+    inputData.addEventListener('change', atualizarPreviewDia);
+    atualizarPreviewDia();
+
     overlay.querySelectorAll('.btn-atalho-hora').forEach(botao => {
         botao.addEventListener('click', () => {
             if (botao.dataset.fixo === 'fechar-dia') {
-                const falta = Math.max(0.01, Math.round((7 - totalHoje) * 100) / 100);
-                inputHoras.value = falta.toFixed(2);
+                const dataEscolhida = inputData.value;
+                const horasOutros = obterTotalHorasRegistradasNoDia(dataEscolhida, editando ? lancamento : null);
+                const falta = Math.round((7.00 - horasOutros) * 100) / 100;
+
+                if (falta <= 0) {
+                    mostrarToast(`O dia ${dataEscolhida.split('-').reverse().join('/')} já possui ${formatarHoras(horasOutros)} registradas (meta de 7h já atingida).`, 'erro');
+                    inputHoras.value = '0.00';
+                } else {
+                    inputHoras.value = falta.toFixed(2);
+                    mostrarToast(`Preenchido com ${formatarHoras(falta)} para completar 7h no dia.`);
+                }
+                atualizarPreviewDia();
+                inputHoras.focus();
+                return;
             } else if (botao.dataset.minutos) {
                 const incr = Number(botao.dataset.minutos) / 60;
                 const atual = Number(inputHoras.value) || 0;
                 const novo = Math.round((atual + incr) * 100) / 100;
                 inputHoras.value = novo.toFixed(2);
+                atualizarPreviewDia();
             }
             inputHoras.focus();
         });
@@ -403,8 +468,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnCompletar = document.getElementById('btn-completar-meta');
     if (btnCompletar) {
         btnCompletar.addEventListener('click', () => {
-            const falta = Math.max(0.01, Math.round((7 - totalHoje) * 100) / 100);
             const hoje = new Date().toLocaleDateString('en-CA');
+            const horasOutros = obterTotalHorasRegistradasNoDia(hoje);
+            const falta = Math.max(0.01, Math.round((7.00 - horasOutros) * 100) / 100);
             const primeiraTarefa = tarefas.length > 0 ? tarefas[0].id : null;
             abrirModalLancamento(hoje, null, falta, primeiraTarefa);
         });
