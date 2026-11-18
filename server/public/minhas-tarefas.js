@@ -28,6 +28,7 @@ function htmlLinha(tarefa) {
             <td class="sprint-cell">${escapar(tarefa.sprint || '-')}</td>
             <td class="num">${formatarHoras(tarefa.horasHoje)}</td>
             <td><div class="row-actions">
+                <button class="btn secundario pequeno" data-acao="gerar-commit" data-tarefa="${tarefa.id}" aria-label="Gerar mensagem de commit da tarefa ${tarefa.id}" title="Gerar mensagem de commit (Padrão Sky)">${window.SkyUI.icon('git-branch')}</button>
                 <button class="btn secundario pequeno" data-acao="copiar" data-tarefa="${tarefa.id}" aria-label="Copiar título da tarefa ${tarefa.id}" title="Copiar título">${window.SkyUI.icon('copy')}</button>
             </div></td>
         </tr>
@@ -359,6 +360,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!tarefa) return;
 
         if (botao.dataset.acao === 'copiar') copiar(tarefa);
+        else if (botao.dataset.acao === 'gerar-commit') abrirGeradorCommit(tarefa);
     });
 
     document.getElementById('dias').addEventListener('click', evento => {

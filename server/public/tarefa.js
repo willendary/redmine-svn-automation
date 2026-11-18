@@ -24,6 +24,10 @@ function renderizarCabecalho() {
     document.getElementById('subtitulo').textContent =
         [tarefa.projeto, tarefa.tracker, tarefa.responsavel].filter(Boolean).join(' · ');
     document.getElementById('link-redmine').href = tarefa.url;
+    const btnGerarCommit = document.getElementById('gerar-commit');
+    if (btnGerarCommit) {
+        btnGerarCommit.onclick = () => abrirGeradorCommit(tarefa);
+    }
     document.getElementById('copiar-titulo').onclick = () => {
         navigator.clipboard.writeText(`T #${tarefa.id} - ${tarefa.assunto}`)
             .then(() => mostrarToast('Título copiado.'))
