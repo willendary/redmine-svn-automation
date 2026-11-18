@@ -128,9 +128,101 @@ async function salvarConfiguracaoRedmine() {
     }
 }
 
+let listaProjetos = [];
+
+async function carregarProjetos() {
+    const dados = await pedirJson('/projetos');
+    listaProjetos = dados.projetos || [];
+    renderizarProjetos();
+}
+
+function renderizarProjetos() {
+    const tbody = document.getElementById('lista-projetos');
+    if (!tbody) return;
+
+    if (listaProjetos.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="estado-vazio">Nenhum projeto cadastrado.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = listaProjetos.map(proj => `
+        <tr>
+            <td>
+                <code>${escapar(proj.chave)}</code>
+                ${proj.padrao ? '<span class="badge versao" style="margin-left:6px;">padrão</span>' : ''}
+            </td>
+            <td>${escapar(proj.branch)}</td>
+            <td>${escapar(proj.tag)}</td>
+            <td style="text-align:center;">
+                ${proj.padrao
+                    ? '<span class="meta" title="Módulo nativo">—</span>'
+                    : `<button type="button" class="btn secundario pequeno" data-remover-proj="${escapar(proj.chave)}" title="Remover módulo">&times;</button>`}
+            </td>
+        </tr>
+    `).join('');
+}
+
+async function adicionarNovoProjeto() {
+    const chave = document.getElementById('novo-proj-chave').value.trim();
+    const branch = document.getElementById('novo-proj-branch').value.trim();
+    const tag = document.getElementById('novo-proj-tag').value.trim();
+    const status = document.getElementById('status-projeto');
+    const botao = document.getElementById('btn-adicionar-projeto');
+
+    if (!chave || !branch) {
+        status.className = 'config-save-status erro';
+        status.textContent = 'Informe a chave e a pasta da branch.';
+        return;
+    }
+
+    botao.disabled = true;
+    status.className = 'config-save-status';
+    status.textContent = 'Adicionando módulo...';
+
+    try {
+        await pedirJson('/projetos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chave, branch, tag })
+        });
+
+        document.getElementById('novo-proj-chave').value = '';
+        document.getElementById('novo-proj-branch').value = '';
+        document.getElementById('novo-proj-tag').value = '';
+
+        status.className = 'config-save-status sucesso';
+        status.textContent = `Módulo "${chave}" cadastrado com sucesso!`;
+        mostrarToast(`Projeto ${chave} adicionado.`);
+        await carregarProjetos();
+    } catch (e) {
+        status.className = 'config-save-status erro';
+        status.textContent = e.message;
+    } finally {
+        botao.disabled = false;
+    }
+}
+
+async function removerProjeto(chave) {
+    if (!confirm(`Deseja remover o projeto "${chave}"?`)) return;
+
+    try {
+        await pedirJson(`/projetos/${encodeURIComponent(chave)}`, { method: 'DELETE' });
+        mostrarToast(`Projeto ${chave} removido.`);
+        await carregarProjetos();
+    } catch (e) {
+        mostrarToast(`Erro ao remover: ${e.message}`, 'erro');
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('salvar-preferencias').addEventListener('click', salvarPreferencias);
     document.getElementById('salvar').addEventListener('click', salvarConfiguracaoRedmine);
+    document.getElementById('btn-adicionar-projeto')?.addEventListener('click', adicionarNovoProjeto);
+
+    document.getElementById('lista-projetos')?.addEventListener('click', evento => {
+        const btn = evento.target.closest('[data-remover-proj]');
+        if (btn) removerProjeto(btn.dataset.removerProj);
+    });
 
     carregarPreferencias().catch(erro => {
         const alvo = document.getElementById('secoes-preferencias');
@@ -140,5 +232,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const status = document.getElementById('status');
         status.className = 'config-save-status erro';
         status.textContent = erro.message;
+    });
+    carregarProjetos().catch(erro => {
+        const tbody = document.getElementById('lista-projetos');
+        if (tbody) tbody.innerHTML = `<tr><td colspan="4" class="aviso erro">${escapar(erro.message)}</td></tr>`;
     });
 });

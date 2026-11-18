@@ -20,3 +20,4 @@ server/config.json
 
 # Preferências locais da interface
 server/preferencias.json
+server/projetos.json

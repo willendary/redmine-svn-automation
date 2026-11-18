@@ -90,6 +90,33 @@ app.put('/preferencias', (req, res) => {
     }
 });
 
+app.get('/projetos', (req, res) => {
+    const { listarProjetos } = require('./projetos');
+    res.json({ success: true, projetos: listarProjetos() });
+});
+
+app.post('/projetos', (req, res) => {
+    try {
+        const { adicionarProjeto } = require('./projetos');
+        const resultado = adicionarProjeto(req.body || {});
+        addLog('INFO', `[PROJETOS] Projeto ${resultado.chave} cadastrado.`);
+        res.json({ success: true, projeto: resultado });
+    } catch (erro) {
+        res.status(400).json({ success: false, error: erro.message });
+    }
+});
+
+app.delete('/projetos/:chave', (req, res) => {
+    try {
+        const { removerProjeto } = require('./projetos');
+        removerProjeto(req.params.chave);
+        addLog('INFO', `[PROJETOS] Projeto ${req.params.chave} removido.`);
+        res.json({ success: true });
+    } catch (erro) {
+        res.status(400).json({ success: false, error: erro.message });
+    }
+});
+
 function dataIsoValida(data) {
     if (typeof data !== 'string') return false;
     const partes = /^(\d{4})-(\d{2})-(\d{2})$/.exec(data);
