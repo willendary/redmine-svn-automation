@@ -44,24 +44,88 @@
   };
   const icon = name => '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="'+(paths[name] || paths.grid)+'"/></svg>';
   window.SkyUI = { icon };
+  const SIDEBAR_KEY = 'sky-sidebar-collapsed';
+  try {
+    if (localStorage.getItem(SIDEBAR_KEY) === 'true') {
+      document.body.classList.add('sidebar-collapsed');
+    }
+  } catch (_) {}
+
   function init() {
     const nav = document.getElementById('nav');
     if (!nav) return;
+    nav.className = 'sidebar';
+    nav.setAttribute('aria-label', 'Navegação principal');
     const path = location.pathname;
     const route = path.startsWith('/tarefa/') ? '/minhas-tarefas' : path === '/' ? '/pendentes' : path.replace(/\.html$/, '');
     const items = [
-      ['/pendentes','Pendentes de merge','merge'],
-      ['/minhas-tarefas','Minhas tarefas','tasks'],
-      ['/config','Configurações','settings'],
-      ['/logs','Logs do sistema','logs']
+      ['/pendentes', 'Pendentes de merge', 'merge'],
+      ['/minhas-tarefas', 'Minhas tarefas', 'tasks'],
+      ['/config', 'Configurações', 'settings'],
+      ['/logs', 'Logs do sistema', 'logs']
     ];
     const current = items.find(item => item[0] === route) || items[0];
-    nav.setAttribute('aria-label','Navegação principal');
-    const links = entries => entries.map(([url,label,ico]) => '<a href="'+url+'"'+(url === route ? ' class="ativo" aria-current="page"' : '')+'>'+icon(ico)+'<span>'+label+'</span></a>').join('');
-    nav.innerHTML = '<a class="marca" href="/pendentes" aria-label="Sky Redmine — início"><img src="/favicon.svg?v=20261111-3" alt="" width="37" height="37"><span>sky<span> redmine</span><small>Workspace</small></span></a><div class="nav-label">Área de trabalho</div><div class="nav-links">'+links(items.slice(0,2))+'</div><div class="nav-divider"></div><div class="nav-label">Gerenciar</div><div class="nav-links">'+links(items.slice(2))+'</div><div class="nav-footer"><div class="workspace-note">'+icon('branch')+'<strong>Seu fluxo, conectado.</strong><p>Tarefas, branches e tempo.<br>Tudo no mesmo lugar.</p></div><div class="workspace-id"><span class="workspace-avatar">S</span><div>Sky Informática<small>Redmine + SVN</small></div></div></div>';
+
+    const links = entries => entries.map(([url, label, ico]) =>
+      '<a href="' + url + '" class="nav-button' + (url === route ? ' ativo' : '') + '"' +
+      (url === route ? ' aria-current="page"' : '') +
+      ' data-tooltip="' + label + '">' +
+      icon(ico) + '<span class="nav-text">' + label + '</span></a>'
+    ).join('');
+
+    nav.innerHTML =
+      '<div class="sidebar-header">' +
+        '<button class="sidebar-toggle" id="sidebarToggle" type="button" aria-label="Alternar tamanho do menu lateral" title="Recolher ou expandir menu">' +
+          '<span class="sidebar-toggle-inner" aria-hidden="true">' +
+            '<svg class="icon ui-icon" viewBox="0 0 24 24"><line x1="4" y1="6.5" x2="20" y2="6.5"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17.5" x2="20" y2="17.5"/></svg>' +
+          '</span>' +
+        '</button>' +
+        '<a class="brand" href="/pendentes" aria-label="Sky Redmine Workspace, início">' +
+          '<span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>' +
+          '<span class="brand-name">sky<span>REDMINE WORKSPACE</span></span>' +
+        '</a>' +
+      '</div>' +
+      '<div class="sidebar-card">' +
+        '<div class="sidebar-intro" id="sidebarIntro">' +
+          '<span class="sidebar-kicker">CONECTE. DESENVOLVA. MESCLE.</span>' +
+          '<h2>Seu workspace mais perto<br>das suas tarefas.</h2>' +
+          '<p>Tarefas do Redmine, branches SVN e registro de tempo em um só lugar.</p>' +
+        '</div>' +
+        '<div class="nav-links">' +
+          '<div class="nav-group">' +
+            '<div class="nav-label">Área de trabalho</div>' +
+            links(items.slice(0, 2)) +
+          '</div>' +
+          '<div class="nav-group">' +
+            '<div class="nav-label">Gerenciar</div>' +
+            links(items.slice(2)) +
+          '</div>' +
+        '</div>' +
+        '<div class="sidebar-footer" title="Sky Redmine Workspace">' +
+          '<span class="footer-dot" aria-hidden="true"></span>' +
+          '<div class="sidebar-footer-text">Sky Redmine<small>Redmine + SVN Workspace</small></div>' +
+        '</div>' +
+      '</div>';
+
+    document.getElementById('sidebarToggle')?.addEventListener('click', () => {
+      const collapsed = document.body.classList.toggle('sidebar-collapsed');
+      try { localStorage.setItem(SIDEBAR_KEY, String(collapsed)); } catch (_) {}
+    });
+
     const bar = document.createElement('header');
-    bar.className = 'app-bar';
-    bar.innerHTML = '<button class="menu-toggle" aria-label="Abrir navegação" aria-expanded="false" aria-controls="nav">'+icon('menu')+'</button><div class="breadcrumb">'+icon('grid')+'<span>Workspace</span>'+icon('arrow')+'<strong>'+ (path.startsWith('/tarefa/') ? 'Detalhes da tarefa' : current[1]) +'</strong></div><div class="app-bar-right"><button type="button" id="theme-toggle" class="theme-toggle" aria-label="Alternar tema"></button><time class="app-date"></time><span class="local-label">Ambiente local</span></div>';
+    bar.className = 'topbar app-bar';
+    bar.innerHTML =
+      '<div class="topbar-left">' +
+        '<button class="icon-button menu-button menu-toggle" aria-label="Abrir navegação" aria-expanded="false" aria-controls="nav">☰</button>' +
+        '<div class="topbar-label breadcrumb">' +
+          '<span>Workspace</span>' + icon('arrow') + '<strong>' + (path.startsWith('/tarefa/') ? 'Detalhes da tarefa' : current[1]) + '</strong>' +
+        '</div>' +
+      '</div>' +
+      '<div class="topbar-right app-bar-right">' +
+        '<button type="button" id="theme-toggle" class="theme-toggle" aria-label="Alternar tema"></button>' +
+        '<time class="app-date"></time>' +
+        '<span class="connection-state local-label online"><span class="status-dot online"></span><span>Ambiente local</span></span>' +
+      '</div>';
     document.body.prepend(bar);
     syncThemeButton();
     document.getElementById('theme-toggle').addEventListener('click',() => {

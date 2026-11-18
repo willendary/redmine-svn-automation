@@ -1,1 +1,31 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#6366f1"/><stop offset="100%" stop-color="#4338ca"/></linearGradient></defs><rect width="40" height="40" rx="11" fill="url(#g)"/><path d="M12 13h16M12 20h12M12 27h8" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/><circle cx="28" cy="27" r="2.5" fill="#c7d2fe"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Sky Redmine Workspace">
+<defs>
+  <linearGradient id="sky-bg" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#122a44"/>
+    <stop offset="100%" stop-color="#0a1b2c"/>
+  </linearGradient>
+  <linearGradient id="sky-blue-grad" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#0077d8"/>
+    <stop offset="100%" stop-color="#005ca9"/>
+  </linearGradient>
+  <clipPath id="sky-squircle">
+    <rect width="256" height="256" rx="56"/>
+  </clipPath>
+</defs>
+<g clip-path="url(#sky-squircle)">
+  <rect width="256" height="256" fill="url(#sky-bg)"/>
+  <circle cx="204" cy="204" r="110" fill="#14b8a6" opacity="0.14"/>
+  <circle cx="52" cy="52" r="90" fill="#0077d8" opacity="0.12"/>
+  <rect x="1" y="1" width="254" height="254" rx="55" fill="none" stroke="#ffffff" stroke-opacity="0.12" stroke-width="1.5"/>
+  <!-- Branch / Merge Connection Lines -->
+  <path d="M62 170 C90 140, 110 140, 122 148" fill="none" stroke="#14b8a6" stroke-width="8" stroke-linecap="round" stroke-dasharray="4 8" opacity="0.4"/>
+  <path d="M122 148 C145 120, 160 100, 182 126" fill="none" stroke="#0077d8" stroke-width="8" stroke-linecap="round" stroke-dasharray="4 8" opacity="0.4"/>
+  <!-- Three Slanted Bars Signature (Teal, Teal, Sky Blue) -->
+  <line x1="58" y1="192" x2="68" y2="150" stroke="#14b8a6" stroke-width="34" stroke-linecap="round"/>
+  <line x1="112" y1="192" x2="132" y2="106" stroke="#14b8a6" stroke-width="34" stroke-linecap="round"/>
+  <line x1="166" y1="192" x2="198" y2="62" stroke="url(#sky-blue-grad)" stroke-width="34" stroke-linecap="round"/>
+  <!-- SVN / Merge Indicator Pin on Tallest Bar -->
+  <circle cx="198" cy="62" r="16" fill="#ffffff" filter="drop-shadow(0 2px 6px rgba(0, 92, 169, 0.4))"/>
+  <circle cx="198" cy="62" r="8" fill="#005ca9"/>
+</g>
+</svg>
