@@ -4,6 +4,7 @@ const { lerConfigRedmine } = require('./merge_pendentes');
 
 const STATUS = { NOVA: 1, EM_ANDAMENTO: 2, RESOLVIDA: 3, FECHADA: 5, INTERROMPIDA: 7 };
 const ATIVIDADE_DESENVOLVIMENTO = 11;
+const CF_SKYRMTT_ID = 12;
 
 function configuracao() {
     const config = lerConfigRedmine();
@@ -205,7 +206,7 @@ async function obterLancamentoTempo(id) {
     return dados.time_entry;
 }
 
-function atualizarLancamentoTempo(id, { horas, comentario, atividadeId, data }) {
+function atualizarLancamentoTempo(id, { horas, comentario, atividadeId, data, skyrmtt = '1' }) {
     return requisitar(`/time_entries/${id}.json`, {
         method: 'PUT',
         body: JSON.stringify({
@@ -213,20 +214,26 @@ function atualizarLancamentoTempo(id, { horas, comentario, atividadeId, data }) 
                 hours: horas,
                 comments: comentario || '',
                 spent_on: data,
-                ...(atividadeId == null ? {} : { activity_id: atividadeId })
+                ...(atividadeId == null ? {} : { activity_id: atividadeId }),
+                custom_fields: [
+                    { id: CF_SKYRMTT_ID, value: String(skyrmtt || '1') }
+                ]
             }
         })
     });
 }
 
-function registrarTempo({ taskId, horas, comentario, atividade = ATIVIDADE_DESENVOLVIMENTO, data = dataLocal() }) {
+function registrarTempo({ taskId, horas, comentario, atividade = ATIVIDADE_DESENVOLVIMENTO, data = dataLocal(), skyrmtt = '1' }) {
     const payload = {
         time_entry: {
             issue_id: Number(taskId),
             hours: horas,
             comments: comentario || '',
             activity_id: atividade,
-            spent_on: data
+            spent_on: data,
+            custom_fields: [
+                { id: CF_SKYRMTT_ID, value: String(skyrmtt || '1') }
+            ]
         }
     };
 
@@ -265,5 +272,6 @@ module.exports = {
     obterLancamentoTempo,
     atualizarLancamentoTempo,
     registrarTempo,
-    atualizarTarefa
+    atualizarTarefa,
+    CF_SKYRMTT_ID
 };

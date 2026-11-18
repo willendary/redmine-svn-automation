@@ -36,6 +36,7 @@ test('registrarTempo envia data escolhida como spent_on', async t => {
 
     assert.equal(requisicao.opcoes.method, 'POST');
     assert.equal(JSON.parse(requisicao.opcoes.body).time_entry.spent_on, '2026-11-06');
+    assert.deepEqual(JSON.parse(requisicao.opcoes.body).time_entry.custom_fields, [{ id: 12, value: '1' }]);
 });
 
 test('atualizarLancamentoTempo envia a nova data para o Redmine', async t => {
@@ -56,4 +57,5 @@ test('atualizarLancamentoTempo envia a nova data para o Redmine', async t => {
 
     assert.equal(requisicao.opcoes.method, 'PUT');
     assert.equal(JSON.parse(requisicao.opcoes.body).time_entry.spent_on, '2026-11-09');
+    assert.deepEqual(JSON.parse(requisicao.opcoes.body).time_entry.custom_fields, [{ id: 12, value: '1' }]);
 });

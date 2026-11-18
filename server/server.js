@@ -152,7 +152,8 @@ app.post('/time-entries', async (req, res) => {
             horas,
             comentario: String(req.body.comentario || ''),
             atividade: idAtividade,
-            data
+            data: date,
+            skyrmtt: req.body.skyrmtt || '1'
         });
         addLog('INFO', `[HORAS] ${horas}h lançadas em T#${idTarefa} para ${date}`);
         res.status(201).json({ success: true, lancamento: resultado?.time_entry || null });
@@ -197,7 +198,8 @@ app.put('/time-entries/:id', async (req, res) => {
             horas,
             comentario: String(req.body.comentario || ''),
             atividadeId: idAtividade,
-            data: date
+            data: date,
+            skyrmtt: req.body.skyrmtt || '1'
         });
         addLog('INFO', `[HORAS] Lançamento ${id} alterado para ${horas}h em ${date}`);
         res.json({ success: true });

@@ -1961,3 +1961,39 @@ html[data-theme="dark"] .diff-file-pane { background: #0d1e30; }
     scroll-behavior: auto !important;
   }
 }
+
+/* Atalhos de Horas e Assistente de Meta */
+.btn-atalho-hora {
+  padding: 4px 10px !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  border-radius: 6px !important;
+  height: auto !important;
+  line-height: 1.4 !important;
+  cursor: pointer;
+}
+.btn-completar-meta {
+  background: var(--teal, #0d9488) !important;
+  color: #ffffff !important;
+  font-weight: 600 !important;
+  padding: 8px 16px !important;
+  border-radius: 8px !important;
+  box-shadow: 0 2px 6px rgba(13, 148, 136, 0.25) !important;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn-completar-meta:hover {
+  background: #0f766e !important;
+  transform: translateY(-1px);
+}
+.daily-overview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.daily-overview-actions {
+  display: flex;
+  align-items: center;
+}

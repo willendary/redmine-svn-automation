@@ -136,6 +136,15 @@ function renderizar() {
     document.getElementById('meta-horas').textContent = formatarHoras(totalHoje);
     document.getElementById('meta-progresso').value = Math.min(7,totalHoje);
     document.getElementById('meta-restante').textContent = restante > 0 ? 'Faltam '+formatarHoras(restante)+' para sua meta.' : 'Meta alcançada. Bom trabalho!';
+    const btnMeta = document.getElementById('btn-completar-meta');
+    if (btnMeta) {
+        if (restante > 0) {
+            btnMeta.textContent = 'Completar Meta (faltam ' + formatarHoras(restante) + ')';
+            btnMeta.classList.remove('oculto');
+        } else {
+            btnMeta.classList.add('oculto');
+        }
+    }
 
     const diasVisiveis = exibirFimDeSemana ? dias : dias.filter(dia => !ehFimDeSemana(dia.dia));
     document.getElementById('dias').innerHTML = diasVisiveis.length > 0
@@ -178,14 +187,14 @@ function alternarDetalhesDia(dia) {
     carregarLancamentosDia(dia);
 }
 
-function abrirModalLancamento(dia, lancamento = null) {
+function abrirModalLancamento(dia, lancamento = null, horasSugeridas = null, taskIdSugerido = null) {
     const editando = Boolean(lancamento);
     const dataOriginal = lancamento?.data || dia;
     const atividadePadrao = atividadesLancamento.find(item => item.padrao) || atividadesLancamento[0];
     const atividadeSelecionada = lancamento?.atividadeId || atividadePadrao?.id || '';
     const campoTarefa = editando
         ? `<div class="campo"><label>Tarefa ou projeto</label><div class="campo-leitura">${lancamento.taskId ? `T#${lancamento.taskId} ${escapar(lancamento.assunto || '')}` : `Projeto: ${escapar(lancamento.projeto || 'sem projeto')}`}</div></div>`
-        : '<div class="campo"><label for="lancamento-tarefa">Número da tarefa</label><input type="number" id="lancamento-tarefa" aria-label="Número da tarefa" min="1" step="1" required placeholder="Ex.: 93555"></div>';
+        : '<div class="campo"><label for="lancamento-tarefa">Número da tarefa</label><input type="number" id="lancamento-tarefa" aria-label="Número da tarefa" min="1" step="1" required placeholder="Ex.: 93555" value="' + (taskIdSugerido ? String(taskIdSugerido) : '') + '"></div>';
     const opcoesAtividade = atividadesLancamento.map(item =>
         `<option value="${item.id}"${item.id === Number(atividadeSelecionada) ? ' selected' : ''}>${escapar(item.nome)}</option>`
     ).join('');
@@ -207,7 +216,14 @@ function abrirModalLancamento(dia, lancamento = null) {
             </div>
             <div class="campo">
                 <label for="lancamento-horas">Horas</label>
-                <input type="number" id="lancamento-horas" aria-label="Quantidade de horas" min="0.01" step="0.01" value="${editando ? Number(lancamento.horas).toFixed(2) : ''}" placeholder="0,00">
+                <input type="number" id="lancamento-horas" aria-label="Quantidade de horas" min="0.01" step="0.01" value="${editando ? Number(lancamento.horas).toFixed(2) : (horasSugeridas != null ? Number(horasSugeridas).toFixed(2) : '')}" placeholder="0,00">
+            <div class="atalhos-horas" style="display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;">
+                <button type="button" class="btn secundario btn-atalho-hora" data-minutos="15" title="Adicionar 15 minutos">+15m</button>
+                <button type="button" class="btn secundario btn-atalho-hora" data-minutos="30" title="Adicionar 30 minutos">+30m</button>
+                <button type="button" class="btn secundario btn-atalho-hora" data-minutos="60" title="Adicionar 1 hora">+1h</button>
+                <button type="button" class="btn secundario btn-atalho-hora" data-minutos="120" title="Adicionar 2 horas">+2h</button>
+                <button type="button" class="btn secundario btn-atalho-hora" data-fixo="fechar-dia" title="Preencher com o que falta para 7h">Fechar Dia</button>
+            </div>
             </div>
             <div class="campo">
                 <label for="lancamento-comentario">Comentário</label>
@@ -222,6 +238,21 @@ function abrirModalLancamento(dia, lancamento = null) {
     `);
 
     overlay.querySelectorAll('[data-fechar]').forEach(botao => botao.addEventListener('click', () => overlay.remove()));
+    const inputHoras = overlay.querySelector('#lancamento-horas');
+    overlay.querySelectorAll('.btn-atalho-hora').forEach(botao => {
+        botao.addEventListener('click', () => {
+            if (botao.dataset.fixo === 'fechar-dia') {
+                const falta = Math.max(0.01, Math.round((7 - totalHoje) * 100) / 100);
+                inputHoras.value = falta.toFixed(2);
+            } else if (botao.dataset.minutos) {
+                const incr = Number(botao.dataset.minutos) / 60;
+                const atual = Number(inputHoras.value) || 0;
+                const novo = Math.round((atual + incr) * 100) / 100;
+                inputHoras.value = novo.toFixed(2);
+            }
+            inputHoras.focus();
+        });
+    });
     overlay.querySelector('#salvar-lancamento').addEventListener('click', async evento => {
         const botao = evento.currentTarget;
         const erro = overlay.querySelector('#erro-lancamento');
@@ -309,6 +340,16 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.getElementById('atualizar').addEventListener('click', () => carregar().catch(erro => mostrarToast(erro.message, 'erro')));
+
+    const btnCompletar = document.getElementById('btn-completar-meta');
+    if (btnCompletar) {
+        btnCompletar.addEventListener('click', () => {
+            const falta = Math.max(0.01, Math.round((7 - totalHoje) * 100) / 100);
+            const hoje = new Date().toLocaleDateString('en-CA');
+            const primeiraTarefa = tarefas.length > 0 ? tarefas[0].id : null;
+            abrirModalLancamento(hoje, null, falta, primeiraTarefa);
+        });
+    }
 
     document.getElementById('corpo').addEventListener('click', evento => {
         const botao = evento.target.closest('[data-acao]');
