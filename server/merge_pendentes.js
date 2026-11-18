@@ -210,6 +210,68 @@ async function marcarComoMesclada({ branchUrl, revisoes, mensagem }) {
     }
 }
 
+// Executa dry-run do merge para detectar conflitos previamente
+async function executarDryRun({ branchUrl, revisoes, targetLocal }) {
+    const url = validarUrlBranch(branchUrl);
+    const lista = [...new Set((revisoes || []).map(Number).filter(Number.isFinite))].sort((a, b) => a - b);
+    const revrange = agruparRevisoes(lista);
+
+    let alvo = targetLocal ? String(targetLocal).trim() : '';
+    let pastaTemp = null;
+
+    try {
+        if (!alvo || !fs.existsSync(alvo)) {
+            pastaTemp = fs.mkdtempSync(path.join(os.tmpdir(), 'sky-dryrun-'));
+            alvo = pastaTemp;
+            await executarSvn(['checkout', `${REPO_BASE}/trunk`, alvo, '--depth', 'empty', '--non-interactive']);
+        }
+
+        const args = ['merge', '--dry-run', url, alvo, '--non-interactive'];
+        if (revrange) {
+            args.splice(2, 0, '-c', revrange);
+        }
+
+        let saida = '';
+        try {
+            saida = await executarSvn(args);
+        } catch (erro) {
+            saida = erro.message;
+        }
+
+        const linhas = saida.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        const conflitos = [];
+        const alteracoes = [];
+
+        for (const linha of linhas) {
+            if (/^C\s+|conflicts|Text conflicts/i.test(linha)) {
+                conflitos.push(linha);
+            } else if (/^[UAGDM]\s+/i.test(linha)) {
+                alteracoes.push(linha);
+            }
+        }
+
+        const limpo = conflitos.length === 0;
+        logger('INFO', `[DRY-RUN] ${url} -> ${limpo ? 'LIMPO' : 'COM CONFLITOS'} (${conflitos.length} conflitos, ${alteracoes.length} alterações)`);
+
+        return {
+            limpo,
+            conflitos,
+            alteracoes,
+            totalConflitos: conflitos.length,
+            totalAlteracoes: alteracoes.length,
+            saida: linhas.slice(0, 50).join('\n')
+        };
+    } finally {
+        if (pastaTemp) {
+            try {
+                fs.rmSync(pastaTemp, { recursive: true, force: true });
+            } catch (e) {
+                // silencioso
+            }
+        }
+    }
+}
+
 
 function parseLog(xml) {
     if (!xml) return [];
@@ -752,6 +814,7 @@ module.exports = {
     montarBranch,
     agruparRevisoes,
     marcarComoMesclada,
+    executarDryRun,
     verificarConteudo,
     listarDiffBranch,
     obterDiffArquivoBranch,

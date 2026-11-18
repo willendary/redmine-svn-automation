@@ -593,6 +593,25 @@ function abrirTortoise(args) {
     });
 }
 
+// Rota para testar merge com dry-run (detectar conflitos previamente)
+app.post('/merge-dry-run', async (req, res) => {
+    const { branchUrl, revisions, target } = req.body || {};
+    if (!branchUrl) return res.status(400).json({ error: 'branchUrl é obrigatório.' });
+
+    addLog('INFO', `[DRY-RUN] Testando merge de ${branchUrl}`);
+    try {
+        const resultado = await mergePendentes.executarDryRun({
+            branchUrl,
+            revisoes: revisions,
+            targetLocal: target
+        });
+        res.json({ success: true, ...resultado });
+    } catch (erro) {
+        addLog('ERROR', `[DRY-RUN] Falha: ${erro.message}`);
+        res.status(500).json({ success: false, error: erro.message });
+    }
+});
+
 // Rota para executar o merge (Via Tortoise para maior segurança e suporte a Working Copy)
 app.post('/execute-merge', async (req, res) => {
     const { source, target, revisions } = req.body;

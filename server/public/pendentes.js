@@ -765,6 +765,11 @@ async function abrirModalMerge(branch) {
     el('merge-comentario').value = `Merge T #${branch.taskId}: `;
     el('merge-status').textContent = '';
     el('merge-status').className = 'status';
+    const elResultado = el('merge-dryrun-resultado');
+    if (elResultado) {
+        elResultado.className = 'aviso oculto';
+        elResultado.innerHTML = '';
+    }
     el('merge-revisoes').innerHTML = '<div class="carregando"><span class="spinner"></span>Carregando revisões...</div>';
     el('merge-executar').disabled = true;
     el('modal-merge').classList.remove('oculto');
@@ -844,6 +849,77 @@ async function executarMerge() {
         status.className = 'status erro';
     } finally {
         el('merge-executar').disabled = false;
+    }
+}
+
+async function testarDryRunMerge() {
+    const branch = estado.branchMerge;
+    if (!branch) return;
+
+    const origem = el('merge-origem').value;
+    const caminho = el('merge-caminho').value.trim();
+    const revisoes = [...document.querySelectorAll('#merge-revisoes input:checked')]
+        .map(input => Number(input.value))
+        .filter(Number.isFinite)
+        .sort((a, b) => a - b);
+
+    const elResultado = el('merge-dryrun-resultado');
+    const botao = el('merge-dryrun');
+
+    if (revisoes.length === 0) {
+        if (elResultado) {
+            elResultado.className = 'aviso erro';
+            elResultado.textContent = 'Selecione ao menos uma revisão para testar o dry-run.';
+            elResultado.classList.remove('oculto');
+        }
+        return;
+    }
+
+    if (botao) {
+        botao.disabled = true;
+        botao.textContent = 'Testando dry-run...';
+    }
+    if (elResultado) {
+        elResultado.className = 'aviso';
+        elResultado.textContent = 'Executando svn merge --dry-run para verificar conflitos...';
+        elResultado.classList.remove('oculto');
+    }
+
+    try {
+        const resposta = await fetch('/merge-dry-run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                branchUrl: branch.branchUrl,
+                revisions: revisoes,
+                target: caminho.length > 3 ? caminho : null
+            })
+        });
+        const dados = await resposta.json();
+        if (!resposta.ok || !dados.success) {
+            throw new Error(dados.error || 'Falha ao executar dry-run.');
+        }
+
+        if (elResultado) {
+            if (dados.limpo) {
+                elResultado.className = 'aviso ok';
+                elResultado.innerHTML = `<strong>🟢 Pré-Merge Limpo!</strong> Nenhum conflito detectado pelo SVN.<br><small>${dados.totalAlteracoes || 0} arquivo(s) serão modificados/adicionados sem colisões.</small>`;
+            } else {
+                elResultado.className = 'aviso erro';
+                const itens = (dados.conflitos || []).map(c => `<li>${escapar(c)}</li>`).join('');
+                elResultado.innerHTML = `<strong>⚠️ Conflitos Detectados (${dados.totalConflitos || 0}):</strong><ul style="margin:6px 0 0 16px; padding:0; font-family:monospace; font-size:12px;">${itens}</ul>`;
+            }
+        }
+    } catch (e) {
+        if (elResultado) {
+            elResultado.className = 'aviso erro';
+            elResultado.textContent = `Erro no dry-run: ${e.message}`;
+        }
+    } finally {
+        if (botao) {
+            botao.disabled = false;
+            botao.textContent = 'Testar Dry-Run';
+        }
     }
 }
 
@@ -971,6 +1047,7 @@ function ligarEventos() {
 
     el('merge-fechar').addEventListener('click', fecharModalMerge);
     el('merge-cancelar').addEventListener('click', fecharModalMerge);
+    el('merge-dryrun')?.addEventListener('click', testarDryRunMerge);
     el('merge-executar').addEventListener('click', executarMerge);
     el('merge-log').addEventListener('click', () => abrirLogTortoise(el('merge-origem').value));
     el('modal-merge').addEventListener('click', evento => {
